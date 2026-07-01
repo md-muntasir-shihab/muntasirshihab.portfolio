@@ -77,9 +77,9 @@ export async function cacheSet<T>(key: string, data: T, ttlSeconds: number = 360
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!redis) return null
   try {
-    const raw = await redis.get<string>(key)
+    const raw = await redis.get<any>(key)
     if (!raw) return null
-    const entry: CacheEntry<T> = JSON.parse(raw)
+    const entry: CacheEntry<T> = typeof raw === "string" ? JSON.parse(raw) : raw
     if (Date.now() > entry.expiresAt) {
       await redis.del(key)
       return null

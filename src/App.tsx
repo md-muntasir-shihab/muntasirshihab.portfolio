@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useContext } from "react"
 import { motion } from "framer-motion"
 import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, StatTicker, ThemeProvider, ThemeCtx } from "./components/ui-kit"
 import { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, type Lang, ADMIN_SLUG, sectionVisibility } from "./lib/data"
-import { StoreProvider, useStore, sanitize, adminSecurity } from "./lib/store"
+import { StoreProvider, useStore, sanitize } from "./lib/store"
 import { supabase } from "./lib/supabase"
 import { useAuth, AuthProvider } from "./hooks/useAuth"
 import { sendContactNotification } from "./lib/email"
@@ -105,7 +105,7 @@ function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
 // ================== HOME ==================
 function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
-  
+  const { visibility } = useStore()
   return (
     <PageShell bg={bgMap["/"]} lang={lang} setLang={setLang}>
       <section className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
@@ -549,7 +549,7 @@ function RecommendationsPage(_p:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ CONTACT (Merged: Social + Hire Me + Form) ============
 function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
-  
+  const { addMessage } = useStore()
   const [sent,setSent]=useState(false)
   const [rateLimited,setRateLimited]=useState(false)
   const [sending,setSending]=useState(false)
@@ -794,7 +794,7 @@ ${services.map(s=>`${s.title.en} — ${s.desc.en} (${s.time})`).join('\n')}
 }
 
 function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
-  const { incCv } = useStore()
+  const { cvCount, incCv } = useStore()
   const [liveCount, setLiveCount] = useState<number|null>(null)
   useEffect(()=>{ getCvDownloadCount().then(setLiveCount) }, [])
   const handleDownload=async()=>{
@@ -949,11 +949,16 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
 
 // BUG-001 fix: route-driven panel renderer (previously always showed Dashboard)
 function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
-  const { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, visibility } = useStore();
-
   switch(activeKey){
     case "dashboard": return <AdminDash lang={lang}/>
-    case "profile": return <AdminEditorProfile lang={lang} title={t("Profile","প্রোফাইল",lang)} />
+    case "profile": return <AdminEditor lang={lang} title={t("Profile","প্রোফাইল",lang)} fields={[
+      [t("Name (EN)","নাম (EN)",lang), profile.name.en],
+      [t("Name (BN)","নাম (BN)",lang), profile.name.bn],
+      [t("Email","ইমেইল",lang), profile.email],
+      [t("Phone","ফোন",lang), profile.phone],
+      [t("Avatar URL","অ্যাভাটার URL",lang), profile.avatar || "—"],
+      [t("Title (EN)","টাইটেল (EN)",lang), profile.title.en],
+    ]}/>
     case "sections": return <AdminSections lang={lang}/>
     case "bg": return <AdminBackgrounds lang={lang}/>
     case "experience": return <AdminList lang={lang} title={t("Experience","অভিজ্ঞতা",lang)} items={experience.map(e=>`${e.role[lang]} — ${e.company} (${e.period})`)}/>
@@ -972,8 +977,6 @@ function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
 }
 
 function AdminEditor({lang, title, fields}:{lang:Lang, title:string, fields:[string,string][]}){
-  const { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, visibility } = useStore();
-
   return (
     <div className="space-y-5">
       <div className="text-[24px] font-[720]">{title}</div>
@@ -991,51 +994,7 @@ function AdminEditor({lang, title, fields}:{lang:Lang, title:string, fields:[str
   )
 }
 
-
-function AdminEditorProfile({lang, title}:{lang:Lang, title:string}){
-  const { profile, updateProfile } = useStore()
-  const [formData, setFormData] = useState({
-    nameEn: profile.name.en, nameBn: profile.name.bn, phone: profile.phone,
-    avatar: profile.avatar || "", titleEn: profile.title.en, logo: profile.customLogo || ""
-  })
-  
-  const handleSave = () => {
-    updateProfile({
-      name: { ...profile.name, en: formData.nameEn, bn: formData.nameBn },
-      phone: formData.phone, avatar: formData.avatar, customLogo: formData.logo,
-      title: { ...profile.title, en: formData.titleEn }
-    })
-    const alert = typeof window !== 'undefined' ? window.alert : () => {}
-    alert(t("Profile changes saved successfully!","প্রোফাইলের পরিবর্তন সফলভাবে সংরক্ষিত হয়েছে!",lang))
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{title}</div>
-      <div className="glass rounded-[18px] p-5 space-y-4 max-w-2xl">
-        {[
-          [t("Name (EN)","নাম (EN)",lang), formData.nameEn, (v:string)=>setFormData({...formData, nameEn: v})],
-          [t("Name (BN)","নাম (BN)",lang), formData.nameBn, (v:string)=>setFormData({...formData, nameBn: v})],
-          [t("Phone","ফোন",lang), formData.phone, (v:string)=>setFormData({...formData, phone: v})],
-          [t("Avatar URL","অ্যাভাটার URL",lang), formData.avatar, (v:string)=>setFormData({...formData, avatar: v})],
-          [t("Logo URL","লোগো URL",lang), formData.logo, (v:string)=>setFormData({...formData, logo: v})],
-          [t("Title (EN)","টাইটেল (EN)",lang), formData.titleEn, (v:string)=>setFormData({...formData, titleEn: v})]
-        ].map(([k,v,onChange], i)=>(
-          <div key={i}>
-            <label className="text-[12px] text-[#9aa0ad]">{k as string}</label>
-            <input value={v as string} onChange={(e)=>(onChange as Function)(e.target.value)} placeholder={k as string} aria-label={k as string} className="w-full mt-[6px] px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b] text-[14px] cursor-text"/>
-          </div>
-        ))}
-        <button onClick={handleSave} className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Save Changes","পরিবর্তন সংরক্ষণ",lang)}</button>
-        <div className="text-[11px] text-[#7e8391]">{t("Changes saved directly to Local Storage.","পরিবর্তনগুলো লোকাল স্টোরেজে সেভ হবে।",lang)}</div>
-      </div>
-    </div>
-  )
-}
-
 function AdminList({lang, title, items}:{lang:Lang, title:string, items:string[]}){
-  const { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, visibility } = useStore();
-
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -1058,7 +1017,7 @@ function AdminList({lang, title, items}:{lang:Lang, title:string, items:string[]
 }
 
 function AdminSections({lang}:{lang:Lang}){
-  const { setVisibility } = useStore()
+  const { visibility, setVisibility } = useStore()
   return (
     <div className="space-y-5">
       <div className="text-[24px] font-[720]">{t("Sections Manager","সেকশন ম্যানেজার",lang)}</div>
@@ -1113,7 +1072,7 @@ function AdminContactSettings({lang}:{lang:Lang}){
 }
 
 function AdminMessages({lang}:{lang:Lang}){
-  const { markRead, deleteMessage } = useStore()
+  const { messages, markRead, deleteMessage } = useStore()
   const fmt=(iso:string)=>{ try{ return new Date(iso).toLocaleString() }catch{ return iso } }
   return (
     <div className="space-y-5">
@@ -1181,36 +1140,40 @@ function AdminCV({lang}:{lang:Lang}){
   )
 }
 
-function AdminSecurity({lang}:{lang:Lang}){ const tfaEnabled = localStorage.getItem("rm_admin_2fa_enabled") === "1"; return (
+function AdminSecurity({lang}:{lang:Lang}){
+  const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
+  const toggleTfa = ()=>{
+    if(tfaOn){
+      localStorage.removeItem("rm_admin_2fa_enabled")
+      sessionStorage.removeItem("rm_admin_2fa")
+    } else {
+      localStorage.setItem("rm_admin_2fa_enabled", "1")
+    }
+    window.location.reload()
+  }
+  return (
     <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Security Settings","নিরাপত্তা সেটিংস",lang)}</div>
-      <div className="glass rounded-[18px] p-5 space-y-4 max-w-xl">
-        <div className="text-[15px] font-[650] mb-3">{t("Change Master Password","মাস্টার পাসওয়ার্ড পরিবর্তন",lang)}</div>
-        <input id="new_email" type="email" defaultValue={adminSecurity.EMAIL} placeholder={t("Admin Email","অ্যাডমিন ইমেইল",lang)} className="w-full px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[#e8e9ef] text-[14px]"/>
-        <input id="new_pass" type="password" placeholder={t("New Password","নতুন পাসওয়ার্ড",lang)} className="w-full px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[#e8e9ef] text-[14px]"/>
-        <button onClick={()=>{
-          const e = (document.getElementById('new_email') as HTMLInputElement).value;
-          const p = (document.getElementById('new_pass') as HTMLInputElement).value;
-          if(e && p) { adminSecurity.updateCreds(e, p); alert(t("Credentials changed successfully!","ক্রেডেনশিয়ালস সফলভাবে পরিবর্তন করা হয়েছে!",lang)) }
-        }} className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Update Credentials","ক্রেডেনশিয়ালস আপডেট",lang)}</button>
-      </div>
-
-      <div className="glass rounded-[18px] p-5 space-y-3 max-w-xl">
-        <div className="text-[15px] font-[650]">{t("Two-Factor Authentication (2FA)","টু-ফ্যাক্টর অথেনটিকেশন (2FA)",lang)}</div>
-        <div className="text-[12px] text-[#7e8391] leading-relaxed">
-          {t("Secure your admin portal with Google Authenticator or Authy.","গুগল অথেনটিকেটর বা অথি দিয়ে অ্যাডমিন পোর্টাল সুরক্ষিত করুন।",lang)}
+      <div className="text-[24px] font-[720]">{t("Security / 2FA","সিকিউরিটি / 2FA",lang)}</div>
+      <div className="glass rounded-[18px] p-5 space-y-3 max-w-xl text-[13.5px]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}/>
+            <span className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}>{tfaOn ? t("Two-Factor Authentication: Enabled","টু-ফ্যাক্টর অথেন্টিকেশন: সক্রিয়",lang) : t("Two-Factor Authentication: Disabled","টু-ফ্যাক্টর অথেন্টিকেশন: নিষ্ক্রিয়",lang)}</span>
+          </div>
+          <button onClick={toggleTfa}
+            className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${tfaOn?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
+            <span className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all ${tfaOn?"left-[27px]":"left-[3px]"}`}/>
+          </button>
         </div>
-        
-        <div className="flex gap-3 pt-2">
-          {tfaEnabled ? (
-            <button onClick={()=>{localStorage.setItem("rm_admin_2fa_enabled","0"); alert("2FA Disabled!"); window.location.reload()}} className="px-5 h-10 rounded-full bg-[#ef4444] text-white font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Disable 2FA","2FA নিষ্ক্রিয় করুন",lang)}</button>
-          ) : (
-            <button onClick={()=>{localStorage.setItem("rm_admin_2fa_enabled","1"); alert("2FA Enabled with Google Authenticator!"); window.location.reload()}} className="px-5 h-10 rounded-full bg-[#5bd07a] text-[#1a1410] font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Enable 2FA","2FA সক্রিয় করুন",lang)}</button>
-          )}
-        </div>
+        <div className={`flex items-center gap-2 ${tfaOn?"text-[#6ad08a]":"text-[#7e8391]"}`}><UserCheck size={16}/> {t("TOTP provider: otplib (Demo)","TOTP প্রোভাইডার: otplib (ডেমো)",lang)}</div>
+        <div className="text-[#c5c9d5]">{t("Active sessions: 1","সক্রিয় সেশন: ১",lang)}</div>
+        <div className="text-[#c5c9d5]">{t("Failed logins (24h): 0","ব্যর্থ লগইন (২৪ঘণ্টা): ০",lang)}</div>
+        <button className="px-4 h-10 rounded-full glass text-[13px] text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Logout all devices","সব ডিভাইস থেকে লগআউট",lang)}</button>
       </div>
+      <div className="text-[11.5px] text-[#7e8391]">{t("Toggle 2FA switch to enable/disable two-factor authentication. When enabled, a 6-digit TOTP code will be required after login.","২এফএ টগল করে টু-ফ্যাক্টর অথেন্টিকেশন চালু/বন্ধ করুন। চালু থাকলে লগইনের পর ৬-ডিজিট TOTP কোড প্রয়োজন হবে।",lang)}</div>
     </div>
-) }
+  )
+}
 
 function AdminCache({lang}:{lang:Lang}){
   return (
@@ -1281,9 +1244,7 @@ function Admin2FA({onVerify}:{onVerify:()=>void}){
   )
 }
 function AdminDash({lang}:{lang:Lang}){
-  const { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, visibility } = useStore();
-
-  const { messages, cvCount } = useStore()
+  const { messages, cvCount, visibility } = useStore()
   const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
   return (
     <div className="space-y-6">
