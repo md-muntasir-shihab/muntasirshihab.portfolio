@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /experience
+Allow: /skills
+Allow: /projects
+Allow: /blog
+Allow: /testimonials
+Allow: /contact
+Allow: /cv
+
+# Admin routes are private — do not index
+Disallow: /xk9-admin-portal-2025
+Disallow: /xk9-admin-portal-2025/
+
+Sitemap: https://muntasirshihab.com/sitemap.xml
