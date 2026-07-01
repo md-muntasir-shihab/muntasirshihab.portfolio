@@ -3,6 +3,7 @@ import {
   profile as defProfile, experience as defExp, skills as defSkills,
   projects as defProjects, testimonials as defTesti, recommendations as defRecs,
   blogPosts as defBlog, services as defServices, sectionVisibility as defVis,
+  tools as defTools, hireMe as defHireMe, education as defEdu, achievements as defAchieve,
 } from "./data"
 
 // ---------- Types ----------
@@ -19,6 +20,10 @@ interface StoreShape {
   recommendations: typeof defRecs
   blogPosts: typeof defBlog
   services: typeof defServices
+  tools: typeof defTools
+  hireMe: typeof defHireMe
+  education: typeof defEdu
+  achievements: typeof defAchieve
   visibility: typeof defVis
   messages: ContactMessage[]
   cvCount: number
@@ -40,7 +45,7 @@ function loadInitial(): StoreShape {
   const base: StoreShape = {
     profile: defProfile, experience: defExp, skills: defSkills, projects: defProjects,
     testimonials: defTesti, recommendations: defRecs, blogPosts: defBlog,
-    services: defServices, visibility: { ...defVis }, messages: [], cvCount: 0,
+    services: defServices, tools: defTools, hireMe: defHireMe, education: defEdu, achievements: defAchieve, visibility: { ...defVis }, messages: [], cvCount: 0,
   }
   try {
     const raw = localStorage.getItem(KEY)
@@ -135,8 +140,9 @@ function saveSec(s: SecState) { localStorage.setItem(SEC_KEY, JSON.stringify(s))
 
 export const adminSecurity = {
   // Fallback credentials
-  EMAIL: "mm.xihab@gmail.com",
-  PASSWORD: "Shihab@2026",
+  get EMAIL() { return localStorage.getItem("rm_admin_email") || "mm.xihab@gmail.com" },
+  get PASSWORD() { return localStorage.getItem("rm_admin_pass") || "Shihab@2026" },
+  updateCreds(e:string, p:string) { localStorage.setItem("rm_admin_email", e); localStorage.setItem("rm_admin_pass", p); },
   getState: loadSec,
   isLocked() { const s = loadSec(); return s.lockedUntil > Date.now() },
   lockRemainingMin() { const s = loadSec(); return Math.max(0, Math.ceil((s.lockedUntil - Date.now()) / 60000)) },
