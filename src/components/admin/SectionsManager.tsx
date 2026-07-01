@@ -1,0 +1,69 @@
+import React from "react"
+import { useStore } from "../../lib/store"
+import { type Lang } from "../../lib/data"
+
+const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
+
+export default function SectionsManager({ lang }: { lang: Lang }) {
+  const { visibility, setVisibility } = useStore()
+
+  const sectionsList: { key: keyof typeof visibility; label: string; bnLabel: string }[] = [
+    { key: "about", label: "About Me", bnLabel: "আমার সম্পর্কে" },
+    { key: "experience", label: "Work Experience", bnLabel: "কাজের অভিজ্ঞতা" },
+    { key: "education", label: "Education", bnLabel: "শিক্ষা যোগ্যতা" },
+    { key: "skills", label: "Skills & Technologies", bnLabel: "দক্ষতা ও প্রযুক্তি" },
+    { key: "services", label: "Services I Offer", bnLabel: "আমার সার্ভিসসমূহ" },
+    { key: "projects", label: "Projects Portfolio", bnLabel: "প্রজেক্ট পোর্টফোলিও" },
+    { key: "blog", label: "Blog & Articles", bnLabel: "লেখালেখি ও ব্লগ" },
+    { key: "testimonials", label: "Client Testimonials", bnLabel: "ক্লায়েন্ট ফিডব্যাক" },
+    { key: "recommendations", label: "Peer Recommendations", bnLabel: "সহকর্মী সুপারিশ" },
+    { key: "achievements", label: "Achievements & Awards", bnLabel: "সাফল্য ও পুরস্কার" },
+    { key: "hireMe", label: "Hire Me Card", bnLabel: "হায়ার মি কার্ড" },
+    { key: "contact", label: "Contact Form & Details", bnLabel: "যোগাযোগ ফরম" },
+  ]
+
+  const toggleSection = async (key: keyof typeof visibility) => {
+    await setVisibility(key, !visibility[key])
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Homepage Sections", "হোমপেজ সেকশনসমূহ", lang)}</div>
+        <p className="text-[13.5px] text-[#7e8391] mt-1.5">
+          {t(
+            "Toggle visibility of each main section on the public landing page.",
+            "পাবলিক হোমপেজে প্রতিটি মূল সেকশনের ভিজিবিলিটি অন বা অফ করুন।",
+            lang
+          )}
+        </p>
+      </div>
+
+      <div className="glass rounded-[18px] p-6 max-w-2xl grid sm:grid-cols-2 gap-4">
+        {sectionsList.map((sec) => {
+          const isEnabled = visibility[sec.key]
+          return (
+            <div
+              key={sec.key}
+              className="flex items-center justify-between p-3.5 rounded-[12px] bg-white/[0.015] border border-white/[0.04] hover:bg-white/[0.03] transition"
+            >
+              <div className="font-[600] text-[13.8px] text-[#e8e9ef]">{t(sec.label, sec.bnLabel, lang)}</div>
+              <button
+                onClick={() => toggleSection(sec.key)}
+                className={`w-[60px] h-[30px] rounded-full p-1 transition-colors duration-250 cursor-pointer ${
+                  isEnabled ? "bg-yellow-500" : "bg-white/10"
+                }`}
+              >
+                <div
+                  className={`w-[22px] h-[22px] rounded-full bg-[#171721] shadow-md transform transition-transform duration-250 ${
+                    isEnabled ? "translate-x-[30px]" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

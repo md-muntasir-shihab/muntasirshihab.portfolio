@@ -43,6 +43,8 @@ export const profile = {
     bn: "খুলনা বিশ্ববিদ্যালয়ে বি.এস.সি. পরিসংখ্যান অধ্যয়ন ও গ্রাফিক ডিজাইন"
   },
   currentlyWorkingUrl: "",
+  cvUrl: "",
+  atsCvUrl: "",
   personalDetails: {
     gender: { en: "Male", bn: "পুরুষ" },
     bloodGroup: "A+",

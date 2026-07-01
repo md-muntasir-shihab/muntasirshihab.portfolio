@@ -9,6 +9,20 @@ import { useAuth, AuthProvider } from "./hooks/useAuth"
 import { sendContactNotification } from "./lib/email"
 import { incrementCvDownload, getCvDownloadCount, incrementVisitorCount } from "./lib/upstash"
 import { GitHubLiveStats } from "./components/GitHubLiveStats"
+import ProfileEditor from "./components/admin/ProfileEditor"
+import ExperienceManager from "./components/admin/ExperienceManager"
+import EducationManager from "./components/admin/EducationManager"
+import SkillsManager from "./components/admin/SkillsManager"
+import ServicesManager from "./components/admin/ServicesManager"
+import ProjectsManager from "./components/admin/ProjectsManager"
+import AchievementsManager from "./components/admin/AchievementsManager"
+import SectionsManager from "./components/admin/SectionsManager"
+import PageBackgroundsManager from "./components/admin/PageBackgroundsManager"
+import TestimonialsManager from "./components/admin/TestimonialsManager"
+import ContactHireManager from "./components/admin/ContactHireManager"
+import BlogManager from "./components/admin/BlogManager"
+import CVManager from "./components/admin/CVManager"
+import MediaManager from "./components/admin/MediaManager"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
   ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu
@@ -67,15 +81,29 @@ export default function App(){
     <ThemeProvider>
       <AuthProvider>
         <StoreProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/*" element={<PublicApp lang={lang} setLang={setLang} />} />
-              <Route path={`/${ADMIN_SLUG}/*`} element={<AdminApp lang={lang} setLang={setLang} />} />
-            </Routes>
-          </BrowserRouter>
+          <MainContent lang={lang} setLang={setLang} />
         </StoreProvider>
       </AuthProvider>
     </ThemeProvider>
+  )
+}
+
+function MainContent({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
+  const { loading: storeLoading } = useStore()
+  if (storeLoading) {
+    return (
+      <div className="min-h-screen bg-[#07070b] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-yellow-500/20 border-t-[#e7b84b] rounded-full animate-spin"/>
+      </div>
+    )
+  }
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/*" element={<PublicApp lang={lang} setLang={setLang} />} />
+        <Route path={`/${ADMIN_SLUG}/*`} element={<AdminApp lang={lang} setLang={setLang} />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
@@ -105,15 +133,15 @@ function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
 // ================== HOME ==================
 function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
-  const { visibility } = useStore()
+  const { profile, hireMe, projects, tools, testimonials, visibility, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/"]} lang={lang} setLang={setLang}>
       <section className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
-        <div className="grid lg:grid-cols-[1.18fr_.82fr] gap-12 items-center">
+         <div className="grid lg:grid-cols-[1.18fr_.82fr] gap-12 items-center">
           <div>
             <div className={`inline-flex items-center gap-2 px-3 py-[7px] rounded-full text-[11.7px] mb-5 ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"glass text-[#e9d29a]"}`}>
               <span className="w-[7px] h-[7px] rounded-full bg-[#5bd07a] shadow-[0_0_12px_rgba(91,208,122,.7)]" />
-              {t("Available for Graphic Design & Web Projects","গ্রাফিক ডিজাইন ও ওয়েব প্রজেক্টের জন্য প্রস্তুত", lang)}
+              {t(hireMe.status.en, hireMe.status.bn, lang)}
             </div>
             <h1 className="text-[38px] md:text-[58px] font-[780] tracking-[-0.02em] leading-[0.96]">
               <span className="gold-text">{profile.firstName}</span><br/>
@@ -142,7 +170,7 @@ function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
               </Link>
             </div>
             <div className={`flex flex-wrap gap-5 mt-8 text-[12.8px] ${lt?"text-[#8a8278]":"text-[#8f94a3]"}`}>
-              <span className="flex items-center gap-2"><MapPin size={14}/> {t("Panchagarh | Khulna","পঞ্চগড় | খুলনা",lang)}</span>
+              <span className="flex items-center gap-2"><MapPin size={14}/> {profile.location[lang]}</span>
               <span className="flex items-center gap-2"><Clock size={14}/> GMT+6</span>
               <span className="flex items-center gap-2"><Code2 size={14}/> {t("Graphics & Web","গ্রাফিক্স ও ওয়েব",lang)}</span>
             </div>
@@ -308,6 +336,7 @@ function FloatingPill({label, style}:{label:string, style:React.CSSProperties}){
 // ============ ABOUT ============
 function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
+  const { profile, education, achievements, visibility: sectionVisibility, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/about"]} lang={lang} setLang={setLang} title={t("About Me","আমার সম্পর্কে",lang)} subtitle={t("MD MUNTASIR SHIHAB | Panchagarh","মোঃ মুনতাসির শিহাব | পঞ্চগড়",lang)}>
       <div className="max-w-6xl mx-auto px-5 md:px-8 mt-8 grid lg:grid-cols-[1.05fr_.95fr] gap-10">
@@ -365,6 +394,7 @@ function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 
 // ============ EXPERIENCE ============
 function ExperiencePage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
+  const { experience, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/experience"]} lang={lang} setLang={setLang} title={t("Experience","অভিজ্ঞতা",lang)} subtitle="2022 — Present">
       <div className="max-w-4xl mx-auto px-5 md:px-8 mt-10 relative">
@@ -391,8 +421,9 @@ function ExperiencePage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ SKILLS ============
 function SkillsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
+  const { skills, tools, pageBackgroundMap: bgMap } = useStore()
   const [cat,setCat]=useState<"all"|"dev"|"design">("all")
-  const filtered = useMemo(()=> cat==="all" ? skills : skills.filter(s=>s.cat===cat), [cat])
+  const filtered = useMemo(()=> cat==="all" ? skills : skills.filter(s=>s.cat===cat), [skills, cat])
   return (
     <PageShell bg={bgMap["/skills"]} lang={lang} setLang={setLang} title={t("Skills & Technologies","দক্ষতা ও টেকনোলজি",lang)} subtitle={t("Design | Statistics | Web","ডিজাইন | পরিসংখ্যান | ওয়েব",lang)}>
       <div className="max-w-6xl mx-auto px-5 md:px-8 mt-8">
@@ -426,6 +457,7 @@ function SkillsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ PROJECTS + GITHUB (merged) ============
 function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
+  const { projects, pageBackgroundMap: bgMap } = useStore()
   const [tab, setTab] = useState<"projects"|"github">("projects")
   return (
     <PageShell bg={bgMap["/projects"]} lang={lang} setLang={setLang} title={t("Projects","প্রজেক্ট",lang)} subtitle={t("Portfolio | Open Source","পোর্টফোলিও | ওপেন সোর্স",lang)}>
@@ -439,6 +471,7 @@ function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
             {projects.map(pr=>(
               <MagicCard key={pr.id} className="group">
                 <div className={`aspect-[16/9.7] rounded-[14px] relative overflow-hidden ${lt?"bg-[#f0e6cf] border border-[#e5e0d4]":"bg-[#10111a] border border-white/[0.07]"}`}>
+                  {pr.img && <img src={pr.img} alt={pr.title[lang]} className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105" />}
                   <div className="absolute inset-0 opacity-[.28]" style={{background:"linear-gradient(125deg, rgba(231,184,75,.22), transparent 55%)"}}/>
                   <div className={`absolute top-3 left-3 text-[11px] font-mono px-2 py-[4px] rounded-full ${lt?"bg-white/60 border border-[#dbc897] text-[#8a6b2b]":"bg-black/40 border border-white/[0.10] text-[#e8cd8a]"}`}>{pr.year}</div>
                   <div className="absolute bottom-3 right-3"><ArrowUpRight size={17} className="text-[#e7c77a] opacity-80 group-hover:translate-x-[2px] group-hover:-translate-y-[2px] transition-transform"/></div>
@@ -460,6 +493,7 @@ function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 
 // ============ BLOG ============
 function BlogPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
+  const { blogPosts, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/blog"]} lang={lang} setLang={setLang} title={t("Blog","ব্লগ",lang)} subtitle={t("Articles & Notes","লেখালেখি ও নোটস",lang)}>
       <div className="max-w-5xl mx-auto px-5 md:px-8 mt-8 grid md:grid-cols-3 gap-5">
@@ -479,14 +513,16 @@ function BlogPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 }
 function BlogDetail({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {slug}=useParams()
+  const { blogPosts } = useStore()
   const post = blogPosts.find(b=>b.slug===slug)
   if(!post) return <Navigate to="/blog" replace />
   return (
     <PageShell bg="starGlow" lang={lang} setLang={setLang} title={post.title[lang]} subtitle={`${post.date} | ${post.read}`}>
       <article className="max-w-3xl mx-auto px-5 md:px-8 mt-8">
         <MagicCard>
-          <p className="text-[16.5px] leading-relaxed">{post.excerpt[lang]}</p>
-          <p className="text-[15px] leading-relaxed mt-5 opacity-70">{t("Full article is loaded from Firebase CMS. Demo render shown here.","সম্পূর্ণ আর্টিকেল Firebase CMS থেকে লোড হয়। এখানে একটি ডেমো দেখানো হচ্ছে।",lang)}</p>
+          <div className="text-[15.5px] leading-relaxed whitespace-pre-wrap space-y-4">
+            {post.content ? post.content[lang] : post.excerpt[lang]}
+          </div>
           <div className="flex flex-wrap gap-2 mt-6 text-[11.5px]">{post.tags.map(tg=><span key={tg} className="px-3 py-[5px] rounded-full bg-white/[0.045] border border-white/[0.08] text-[#dec58a]">{tg}</span>)}</div>
         </MagicCard>
         <div className="mt-5 text-[13px]"><Link to="/blog" className="hover:text-[#f0cf89]">{t("Back to blog","ব্লগে ফিরুন",lang)}</Link></div>
@@ -498,6 +534,7 @@ function BlogDetail({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ TESTIMONIALS ============
 function TestimonialsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
+  const { testimonials, recommendations, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/testimonials"]} lang={lang} setLang={setLang} title={t("Testimonials","প্রশংসাপত্র",lang)} subtitle={t("Reviews & Recommendations","রিভিউ ও সুপারিশ",lang)}>
       <div className="max-w-5xl mx-auto px-5 md:px-8 mt-8">
@@ -521,7 +558,13 @@ function TestimonialsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                 <div key={r.name} className="moving-border rounded-[20px]">
                   <div className={`rounded-[20px] p-[20px] ${lt?"bg-white/80 border border-[#e5e0d4]":"glass"}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-[13px] font-[700] ${lt?"bg-[#f0e6cf] border border-[#dbc897] text-[#8a6b2b]":"gold-ring bg-[#14141f]"}`}>{r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                      {r.avatar ? (
+                        <img src={r.avatar} alt={r.name} className="w-12 h-12 rounded-full object-cover border border-[#e7b84b]/30" />
+                      ) : (
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-[13px] font-[700] ${lt?"bg-[#f0e6cf] border border-[#dbc897] text-[#8a6b2b]":"gold-ring bg-[#14141f]"}`}>
+                          {r.name.split(" ").map(n=>n[0]).join("").slice(0,2)}
+                        </div>
+                      )}
                       <div><div className="font-[610]">{r.name}</div><div className={`text-[12.5px] ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{r.designation} | {r.company}</div></div>
                     </div>
                     <div className={`text-[11.7px] mt-3 ${lt?"text-[#a0782e]":"text-[#dec283]"}`}>{r.relationship[lang]} | {r.date}</div>
@@ -549,7 +592,7 @@ function RecommendationsPage(_p:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ CONTACT (Merged: Social + Hire Me + Form) ============
 function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
-  const { addMessage } = useStore()
+  const { profile, hireMe, services, visibility: sectionVisibility, pageBackgroundMap: bgMap, addMessage } = useStore()
   const [sent,setSent]=useState(false)
   const [rateLimited,setRateLimited]=useState(false)
   const [sending,setSending]=useState(false)
@@ -755,7 +798,15 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 }
 
 // ============ CV ============
-function generateCV(){
+function generateCV(
+  profile: any,
+  education: any[],
+  experience: any[],
+  skills: any[],
+  tools: string[],
+  achievements: any[],
+  services: any[]
+){
   const cvText = `MD MUNTASIR SHIHAB — CV 2026
 ================================
 ${profile.title.en}
@@ -794,16 +845,28 @@ ${services.map(s=>`${s.title.en} — ${s.desc.en} (${s.time})`).join('\n')}
 }
 
 function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
-  const { cvCount, incCv } = useStore()
+  const { profile, education, experience, skills, tools, achievements, services, cvCount, incCv, pageBackgroundMap: bgMap } = useStore()
   const [liveCount, setLiveCount] = useState<number|null>(null)
   useEffect(()=>{ getCvDownloadCount().then(setLiveCount) }, [])
-  const handleDownload=async()=>{
+  
+  const handleDownload = async (type: "designed" | "ats" = "designed") => {
     incCv()
-    generateCV()
     // Upstash এ real download count increment করো
     const newCount = await incrementCvDownload()
     if(newCount>0) setLiveCount(newCount)
+
+    const pdfUrl = type === "designed" ? profile.cvUrl : profile.atsCvUrl
+    if (pdfUrl) {
+      const a = document.createElement("a")
+      a.href = pdfUrl
+      a.target = "_blank"
+      a.download = type === "designed" ? "MD_MUNTASIR_SHIHAB_CV.pdf" : "MD_MUNTASIR_SHIHAB_ATS_CV.pdf"
+      a.click()
+    } else {
+      generateCV(profile, education, experience, skills, tools, achievements, services)
+    }
   }
+  
   // Live count থাকলে সেটা দেখাও, না হলে local count
   const count = liveCount ?? cvCount
   return (
@@ -820,8 +883,8 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
             <div>• {t("HSC GPA 4.92 | SSC Golden GPA 5.00","HSC জিপিএ ৪.৯২ | SSC গোল্ডেন ৫.০০",lang)}</div>
           </div>
           <div className="flex flex-wrap gap-3 mt-6">
-            <ShimmerButton onClick={handleDownload}>{t("Download CV","CV ডাউনলোড",lang)}</ShimmerButton>
-            <button onClick={handleDownload} className="px-4 h-10 rounded-full glass text-[13.4px]">{t("ATS Version","ATS সংস্করণ",lang)}</button>
+            <ShimmerButton onClick={() => handleDownload("designed")}>{t("Download CV","CV ডাউনলোড",lang)}</ShimmerButton>
+            <button onClick={() => handleDownload("ats")} className="px-4 h-10 rounded-full glass text-[13.4px]">{t("ATS Version","ATS সংস্করণ",lang)}</button>
           </div>
         </MagicCard>
         <MagicCard>
@@ -855,12 +918,15 @@ const ADMIN_MENU: [string, string, string][] = [
   ["sections","/sections","Sections|সেকশনসমূহ"],
   ["bg","/bg","Page Backgrounds|পেজ ব্যাকগ্রাউন্ড"],
   ["experience","/experience","Experience|অভিজ্ঞতা"],
+  ["education","/education","Education|শিক্ষা"],
   ["skills","/skills","Skills|দক্ষতা"],
   ["projects","/projects","Projects|প্রজেক্ট"],
+  ["achievements","/achievements","Achievements|অর্জনসমূহ"],
   ["contact","/contact","Contact & Hire|যোগাযোগ ও নিয়োগ"],
   ["recs","/recs","Testimonials|প্রশংসাপত্র"],
   ["blog","/blog","Blog|ব্লগ"],
   ["messages","/messages","Messages|মেসেজসমূহ"],
+  ["media","/media","Media Library|মিডিয়া গ্যালারি"],
   ["analytics","/analytics","Analytics|অ্যানালিটিক্স"],
   ["cv","/cv","CV Manager|সিভি ম্যানেজার"],
   ["security","/security","Security / 2FA|সিকিউরিটি"],
@@ -951,25 +1017,21 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
 function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
   switch(activeKey){
     case "dashboard": return <AdminDash lang={lang}/>
-    case "profile": return <AdminEditor lang={lang} title={t("Profile","প্রোফাইল",lang)} fields={[
-      [t("Name (EN)","নাম (EN)",lang), profile.name.en],
-      [t("Name (BN)","নাম (BN)",lang), profile.name.bn],
-      [t("Email","ইমেইল",lang), profile.email],
-      [t("Phone","ফোন",lang), profile.phone],
-      [t("Avatar URL","অ্যাভাটার URL",lang), profile.avatar || "—"],
-      [t("Title (EN)","টাইটেল (EN)",lang), profile.title.en],
-    ]}/>
-    case "sections": return <AdminSections lang={lang}/>
-    case "bg": return <AdminBackgrounds lang={lang}/>
-    case "experience": return <AdminList lang={lang} title={t("Experience","অভিজ্ঞতা",lang)} items={experience.map(e=>`${e.role[lang]} — ${e.company} (${e.period})`)}/>
-    case "skills": return <AdminList lang={lang} title={t("Skills","দক্ষতা",lang)} items={skills.map(s=>`${s.name} — ${s.level}% [${s.cat}]`)}/>
-    case "projects": return <AdminList lang={lang} title={t("Projects","প্রজেক্ট",lang)} items={projects.map(p=>`${p.title[lang]} (${p.year})${p.featured?" ★":""}`)}/>
-    case "contact": return <AdminContactSettings lang={lang}/>
-    case "recs": return <AdminList lang={lang} title={t("Testimonials","প্রশংসাপত্র",lang)} items={[...testimonials.map(tm=>`${tm.name} — ${tm.role[lang]}`), ...recommendations.map(r=>`${r.name} — ${r.designation}`)]}/>
-    case "blog": return <AdminList lang={lang} title={t("Blog Posts","ব্লগ পোস্ট",lang)} items={blogPosts.map(b=>`${b.title[lang]} (${b.date})`)}/>
+    case "profile": return <ProfileEditor lang={lang}/>
+    case "sections": return <SectionsManager lang={lang}/>
+    case "bg": return <PageBackgroundsManager lang={lang}/>
+    case "experience": return <ExperienceManager lang={lang}/>
+    case "education": return <EducationManager lang={lang}/>
+    case "skills": return <SkillsManager lang={lang}/>
+    case "projects": return <ProjectsManager lang={lang}/>
+    case "achievements": return <AchievementsManager lang={lang}/>
+    case "contact": return <ContactHireManager lang={lang}/>
+    case "recs": return <TestimonialsManager lang={lang}/>
+    case "blog": return <BlogManager lang={lang}/>
     case "messages": return <AdminMessages lang={lang}/>
+    case "media": return <MediaManager lang={lang}/>
     case "analytics": return <AdminAnalytics lang={lang}/>
-    case "cv": return <AdminCV lang={lang}/>
+    case "cv": return <CVManager lang={lang}/>
     case "security": return <AdminSecurity lang={lang}/>
     case "cache": return <AdminCache lang={lang}/>
     default: return <AdminDash lang={lang}/>

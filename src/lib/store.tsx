@@ -4,7 +4,9 @@ import {
   projects as defProjects, testimonials as defTesti, recommendations as defRecs,
   blogPosts as defBlog, services as defServices, sectionVisibility as defVis,
   tools as defTools, hireMe as defHireMe, education as defEdu, achievements as defAchieve,
+  pageBackgroundMap as defBgMap
 } from "./data"
+import { supabase, supabaseAdmin } from "./supabase"
 
 // ---------- Types ----------
 export interface ContactMessage {
@@ -12,7 +14,7 @@ export interface ContactMessage {
 }
 
 interface StoreShape {
-  profile: typeof defProfile
+  profile: typeof defProfile & { customLogo?: string }
   experience: typeof defExp
   skills: typeof defSkills
   projects: typeof defProjects
@@ -25,100 +27,327 @@ interface StoreShape {
   education: typeof defEdu
   achievements: typeof defAchieve
   visibility: typeof defVis
+  pageBackgroundMap: typeof defBgMap
   messages: ContactMessage[]
   cvCount: number
 }
 
 interface StoreCtxType extends StoreShape {
-  setVisibility: (k: keyof typeof defVis, v: boolean) => void
-  addMessage: (m: Omit<ContactMessage, "id" | "date" | "read">) => void
-  markRead: (id: string) => void
-  deleteMessage: (id: string) => void
-  incCv: () => number
-  updateProfile: (patch: Partial<typeof defProfile>) => void
-  resetAll: () => void
+  loading: boolean
+  setVisibility: (k: keyof typeof defVis, v: boolean) => Promise<void>
+  addMessage: (m: Omit<ContactMessage, "id" | "date" | "read">) => Promise<void>
+  markRead: (id: string) => Promise<void>
+  deleteMessage: (id: string) => Promise<void>
+  incCv: () => Promise<number>
+  updateProfile: (patch: Partial<typeof defProfile & { customLogo?: string }>) => Promise<void>
+  updateExperience: (val: typeof defExp) => Promise<void>
+  updateEducation: (val: typeof defEdu) => Promise<void>
+  updateSkills: (val: typeof defSkills) => Promise<void>
+  updateProjects: (val: typeof defProjects) => Promise<void>
+  updateTestimonials: (val: typeof defTesti) => Promise<void>
+  updateRecommendations: (val: typeof defRecs) => Promise<void>
+  updateBlogPosts: (val: typeof defBlog) => Promise<void>
+  updateServices: (val: typeof defServices) => Promise<void>
+  updateTools: (val: typeof defTools) => Promise<void>
+  updateHireMe: (val: typeof defHireMe) => Promise<void>
+  updateAchievements: (val: typeof defAchieve) => Promise<void>
+  updatePageBackgroundMap: (val: typeof defBgMap) => Promise<void>
+  resetAll: () => Promise<void>
 }
 
-const KEY = "rm_store_v1"
-
-function loadInitial(): StoreShape {
-  const base: StoreShape = {
-    profile: defProfile, experience: defExp, skills: defSkills, projects: defProjects,
-    testimonials: defTesti, recommendations: defRecs, blogPosts: defBlog,
-    services: defServices, tools: defTools, hireMe: defHireMe, education: defEdu, achievements: defAchieve, visibility: { ...defVis }, messages: [], cvCount: 0,
+// Global helper to save to Supabase portfolio_content table using RPC or direct upsert
+async function saveToDb(key: string, value: any) {
+  if (!supabaseAdmin) {
+    console.warn(`[Store] supabaseAdmin not initialized. Cannot save key "${key}".`);
+    return;
   }
   try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const saved = JSON.parse(raw)
-      // only persist the mutable pieces; static content always from latest defaults
-      return {
-        ...base,
-        visibility: { ...base.visibility, ...(saved.visibility || {}) },
-        messages: Array.isArray(saved.messages) ? saved.messages : [],
-        cvCount: typeof saved.cvCount === "number" ? saved.cvCount : 0,
-        profile: { ...base.profile, ...(saved.profilePatch || {}) },
-      }
+    const { error } = await supabaseAdmin.rpc('upsert_portfolio_content', {
+      p_key: key,
+      p_value: value
+    });
+    if (error) {
+      // Fallback if RPC is missing/failed
+      const { error: upsertErr } = await supabaseAdmin
+        .from('portfolio_content')
+        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      if (upsertErr) throw upsertErr;
     }
-  } catch { /* ignore corrupt storage */ }
-  return base
+  } catch (err) {
+    console.error(`[Store] Failed to save key "${key}" to DB:`, err);
+  }
 }
 
 const StoreCtx = createContext<StoreCtxType | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<StoreShape>(loadInitial)
-  const [profilePatch, setProfilePatch] = useState<Partial<typeof defProfile>>({})
+  const [loading, setLoading] = useState(true)
+  const [state, setState] = useState<StoreShape>(() => ({
+    profile: defProfile,
+    experience: defExp,
+    skills: defSkills,
+    projects: defProjects,
+    testimonials: defTesti,
+    recommendations: defRecs,
+    blogPosts: defBlog,
+    services: defServices,
+    tools: defTools,
+    hireMe: defHireMe,
+    education: defEdu,
+    achievements: defAchieve,
+    visibility: defVis,
+    pageBackgroundMap: defBgMap,
+    messages: [],
+    cvCount: 0,
+  }))
 
   useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify({
-        visibility: state.visibility,
-        messages: state.messages,
-        cvCount: state.cvCount,
-        profilePatch,
-      }))
-    } catch { /* storage full / blocked */ }
-  }, [state.visibility, state.messages, state.cvCount, profilePatch])
+    async function loadData() {
+      try {
+        const { data, error } = await supabase.from("portfolio_content").select("*")
+        if (error) throw error
 
-  const setVisibility = useCallback((k: keyof typeof defVis, v: boolean) => {
-    setState(s => ({ ...s, visibility: { ...s.visibility, [k]: v } }))
+        let dbState: Partial<StoreShape> = {}
+        if (data) {
+          data.forEach((row: any) => {
+            dbState[row.key as keyof StoreShape] = row.value
+          })
+        }
+
+        // Fetch messages
+        const { data: dbMessages, error: msgError } = await supabase
+          .from("messages")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        // Fetch cv downloads
+        const { count: cvDownloadsCount, error: cvError } = await supabase
+          .from("cv_downloads")
+          .select("*", { count: "exact", head: true })
+
+        setState((s) => ({
+          ...s,
+          profile: dbState.profile ? { ...s.profile, ...dbState.profile } : s.profile,
+          experience: dbState.experience || s.experience,
+          education: dbState.education || s.education,
+          skills: dbState.skills || s.skills,
+          projects: dbState.projects || s.projects,
+          testimonials: dbState.testimonials || s.testimonials,
+          recommendations: dbState.recommendations || s.recommendations,
+          blogPosts: dbState.blogPosts || s.blogPosts,
+          services: dbState.services || s.services,
+          tools: dbState.tools || s.tools,
+          hireMe: dbState.hireMe || s.hireMe,
+          achievements: dbState.achievements || s.achievements,
+          visibility: dbState.visibility ? { ...s.visibility, ...dbState.visibility } : s.visibility,
+          pageBackgroundMap: dbState.pageBackgroundMap ? { ...s.pageBackgroundMap, ...dbState.pageBackgroundMap } : s.pageBackgroundMap,
+          messages: dbMessages
+            ? dbMessages.map((m: any) => ({
+                id: m.id,
+                name: m.name,
+                email: m.email,
+                phone: m.phone || "",
+                message: m.message,
+                date: m.created_at || m.date,
+                read: m.is_read || false,
+              }))
+            : [],
+          cvCount: cvDownloadsCount !== null && !cvError ? cvDownloadsCount : 0,
+        }))
+      } catch (err) {
+        console.warn("[Store] Failed to load data from Supabase, using defaults:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
   }, [])
 
-  const addMessage = useCallback((m: Omit<ContactMessage, "id" | "date" | "read">) => {
+  const setVisibility = useCallback(async (k: keyof typeof defVis, v: boolean) => {
+    setState(s => {
+      const nextVis = { ...s.visibility, [k]: v };
+      saveToDb("visibility", nextVis);
+      return { ...s, visibility: nextVis };
+    });
+  }, [])
+
+  const addMessage = useCallback(async (m: Omit<ContactMessage, "id" | "date" | "read">) => {
     const msg: ContactMessage = {
-      ...m, id: Math.random().toString(36).slice(2), date: new Date().toISOString(), read: false,
+      ...m,
+      id: Math.random().toString(36).slice(2),
+      date: new Date().toISOString(),
+      read: false,
     }
     setState(s => ({ ...s, messages: [msg, ...s.messages] }))
   }, [])
 
-  const markRead = useCallback((id: string) => {
+  const markRead = useCallback(async (id: string) => {
     setState(s => ({ ...s, messages: s.messages.map(m => m.id === id ? { ...m, read: true } : m) }))
+    if (supabaseAdmin) {
+      await supabaseAdmin.from('messages').update({ is_read: true }).eq('id', id)
+    }
   }, [])
 
-  const deleteMessage = useCallback((id: string) => {
+  const deleteMessage = useCallback(async (id: string) => {
     setState(s => ({ ...s, messages: s.messages.filter(m => m.id !== id) }))
+    if (supabaseAdmin) {
+      await supabaseAdmin.from('messages').delete().eq('id', id)
+    }
   }, [])
 
-  const incCv = useCallback(() => {
-    let next = 0
-    setState(s => { next = s.cvCount + 1; return { ...s, cvCount: next } })
+  const incCv = useCallback(async () => {
+    let next = state.cvCount + 1
+    try {
+      const { incrementCvDownload } = await import("./upstash")
+      const count = await incrementCvDownload()
+      if (count > 0) next = count
+    } catch (e) {
+      console.warn("Failed to increment CV count in Redis:", e)
+    }
+    setState(s => ({ ...s, cvCount: next }))
     return next
+  }, [state.cvCount])
+
+  const updateProfile = useCallback(async (patch: Partial<typeof defProfile & { customLogo?: string }>) => {
+    setState(s => {
+      const nextProfile = { ...s.profile, ...patch };
+      saveToDb("profile", nextProfile);
+      return { ...s, profile: nextProfile };
+    });
   }, [])
 
-  const updateProfile = useCallback((patch: Partial<typeof defProfile>) => {
-    setProfilePatch(p => ({ ...p, ...patch }))
-    setState(s => ({ ...s, profile: { ...s.profile, ...patch } }))
+  const updateExperience = useCallback(async (val: typeof defExp) => {
+    setState(s => {
+      saveToDb("experience", val);
+      return { ...s, experience: val };
+    });
   }, [])
 
-  const resetAll = useCallback(() => {
-    localStorage.removeItem(KEY)
-    setProfilePatch({})
-    setState(loadInitial())
+  const updateEducation = useCallback(async (val: typeof defEdu) => {
+    setState(s => {
+      saveToDb("education", val);
+      return { ...s, education: val };
+    });
+  }, [])
+
+  const updateSkills = useCallback(async (val: typeof defSkills) => {
+    setState(s => {
+      saveToDb("skills", val);
+      return { ...s, skills: val };
+    });
+  }, [])
+
+  const updateProjects = useCallback(async (val: typeof defProjects) => {
+    setState(s => {
+      saveToDb("projects", val);
+      return { ...s, projects: val };
+    });
+  }, [])
+
+  const updateTestimonials = useCallback(async (val: typeof defTesti) => {
+    setState(s => {
+      saveToDb("testimonials", val);
+      return { ...s, testimonials: val };
+    });
+  }, [])
+
+  const updateRecommendations = useCallback(async (val: typeof defRecs) => {
+    setState(s => {
+      saveToDb("recommendations", val);
+      return { ...s, recommendations: val };
+    });
+  }, [])
+
+  const updateBlogPosts = useCallback(async (val: typeof defBlog) => {
+    setState(s => {
+      saveToDb("blogPosts", val);
+      return { ...s, blogPosts: val };
+    });
+  }, [])
+
+  const updateServices = useCallback(async (val: typeof defServices) => {
+    setState(s => {
+      saveToDb("services", val);
+      return { ...s, services: val };
+    });
+  }, [])
+
+  const updateTools = useCallback(async (val: typeof defTools) => {
+    setState(s => {
+      saveToDb("tools", val);
+      return { ...s, tools: val };
+    });
+  }, [])
+
+  const updateHireMe = useCallback(async (val: typeof defHireMe) => {
+    setState(s => {
+      saveToDb("hireMe", val);
+      return { ...s, hireMe: val };
+    });
+  }, [])
+
+  const updateAchievements = useCallback(async (val: typeof defAchieve) => {
+    setState(s => {
+      saveToDb("achievements", val);
+      return { ...s, achievements: val };
+    });
+  }, [])
+
+  const updatePageBackgroundMap = useCallback(async (val: typeof defBgMap) => {
+    setState(s => {
+      saveToDb("pageBackgroundMap", val);
+      return { ...s, pageBackgroundMap: val };
+    });
+  }, [])
+
+  const resetAll = useCallback(async () => {
+    if (supabaseAdmin) {
+      await supabaseAdmin.from("portfolio_content").delete().neq("key", "")
+    }
+    setState({
+      profile: defProfile,
+      experience: defExp,
+      skills: defSkills,
+      projects: defProjects,
+      testimonials: defTesti,
+      recommendations: defRecs,
+      blogPosts: defBlog,
+      services: defServices,
+      tools: defTools,
+      hireMe: defHireMe,
+      education: defEdu,
+      achievements: defAchieve,
+      visibility: defVis,
+      pageBackgroundMap: defBgMap,
+      messages: [],
+      cvCount: 0,
+    })
   }, [])
 
   return (
-    <StoreCtx.Provider value={{ ...state, setVisibility, addMessage, markRead, deleteMessage, incCv, updateProfile, resetAll }}>
+    <StoreCtx.Provider value={{
+      ...state,
+      loading,
+      setVisibility,
+      addMessage,
+      markRead,
+      deleteMessage,
+      incCv,
+      updateProfile,
+      updateExperience,
+      updateEducation,
+      updateSkills,
+      updateProjects,
+      updateTestimonials,
+      updateRecommendations,
+      updateBlogPosts,
+      updateServices,
+      updateTools,
+      updateHireMe,
+      updateAchievements,
+      updatePageBackgroundMap,
+      resetAll
+    }}>
       {children}
     </StoreCtx.Provider>
   )
@@ -139,7 +368,6 @@ function loadSec(): SecState {
 function saveSec(s: SecState) { localStorage.setItem(SEC_KEY, JSON.stringify(s)) }
 
 export const adminSecurity = {
-  // Fallback credentials
   get EMAIL() { return localStorage.getItem("rm_admin_email") || "mm.xihab@gmail.com" },
   get PASSWORD() { return localStorage.getItem("rm_admin_pass") || "Shihab@2026" },
   updateCreds(e:string, p:string) { localStorage.setItem("rm_admin_email", e); localStorage.setItem("rm_admin_pass", p); },
@@ -148,14 +376,13 @@ export const adminSecurity = {
   lockRemainingMin() { const s = loadSec(); return Math.max(0, Math.ceil((s.lockedUntil - Date.now()) / 60000)) },
   registerFail() {
     const s = loadSec(); s.fails += 1
-    if (s.fails >= 5) { s.lockedUntil = Date.now() + 10 * 60 * 1000; s.fails = 0 } // lock 10 min after 5 fails
+    if (s.fails >= 5) { s.lockedUntil = Date.now() + 10 * 60 * 1000; s.fails = 0 }
     saveSec(s); return s
   },
   reset() { saveSec({ fails: 0, lockedUntil: 0 }) },
   failsLeft() { const s = loadSec(); return Math.max(0, 5 - s.fails) },
 }
 
-// Basic XSS sanitizer for user-submitted text
 export function sanitize(input: string): string {
   return input
     .replace(/</g, "&lt;").replace(/>/g, "&gt;")
