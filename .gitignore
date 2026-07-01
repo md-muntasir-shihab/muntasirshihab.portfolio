@@ -10,6 +10,7 @@ build/
 *.local
 
 # Environment variables & secrets — NEVER commit
+firebase-service-account.json
 .env
 .env.*
 !.env.example

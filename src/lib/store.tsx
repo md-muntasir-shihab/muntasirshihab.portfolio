@@ -134,8 +134,8 @@ function loadSec(): SecState {
 function saveSec(s: SecState) { localStorage.setItem(SEC_KEY, JSON.stringify(s)) }
 
 export const adminSecurity = {
-  // Demo credentials – replace with Firebase Auth when connected
-  EMAIL: "admin@muntasir.dev",
+  // Fallback credentials
+  EMAIL: "mm.xihab@gmail.com",
   PASSWORD: "Shihab@2026",
   getState: loadSec,
   isLocked() { const s = loadSec(); return s.lockedUntil > Date.now() },

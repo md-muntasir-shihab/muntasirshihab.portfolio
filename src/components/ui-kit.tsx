@@ -43,7 +43,7 @@ export function PageShell({ bg, children, lang, setLang, title, subtitle }:{
       {theme==="dark" && <AnimatedBackground type={bg} />}
       {theme==="light" && <div className="fixed inset-0 -z-20 bg-[#f5f3ee]"/>}
       <Navbar lang={lang} setLang={setLang} />
-      <main className="relative z-10 pt-[92px] pb-24">
+      <main className="relative z-10 pt-[110px] md:pt-[100px] pb-24">
         {(title || subtitle) && (
           <div className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
             <motion.div initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{duration:.55}}>
@@ -56,7 +56,7 @@ export function PageShell({ bg, children, lang, setLang, title, subtitle }:{
       </main>
       <Footer lang={lang} />
       <ScrollProgress />
-      <CustomCursor />
+      {/* CustomCursor disabled — using native cursor */}
       <BackToTop />
     </div>
   )
@@ -101,9 +101,9 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
         <div className={`rounded-[18px] px-4 md:px-6 h-[62px] flex items-center justify-between ${lt?"bg-white/95 backdrop-blur-xl border border-[#e5e0d4] shadow-sm":"bg-[#0c0c14]/92 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.4)]"}`}>
           <Link to="/" className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-[11px] flex items-center justify-center text-[13px] font-[700] font-mono ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"gold-ring bg-[#14141f] gold-text"}`}>MS</div>
-            <div className="hidden sm:block leading-tight">
-              <div className={`text-[14.5px] font-[650] tracking-[-0.01em] ${lt?"text-[#1a1a1f]":""}`}>{profile.name[lang]}</div>
-              <div className={`text-[11px] -mt-[1px] ${lt?"text-[#8a7a5c]":"text-[#9aa0ad]"}`}>{t("Statistics Student & Designer","পরিসংখ্যান শিক্ষার্থী ও ডিজাইনার",lang)}</div>
+            <div className="block leading-tight max-w-[180px] sm:max-w-none">
+              <div className={`text-[13.5px] sm:text-[14.5px] font-[650] tracking-[-0.01em] truncate ${lt?"text-[#1a1a1f]":""}`}>{profile.name[lang]}</div>
+              <div className={`text-[10px] sm:text-[11px] -mt-[1px] truncate ${lt?"text-[#8a7a5c]":"text-[#9aa0ad]"}`}>{t("Statistics Student & Designer","পরিসংখ্যান শিক্ষার্থী ও ডিজাইনার",lang)}</div>
             </div>
           </Link>
           <nav className="hidden lg:flex items-center gap-[22px] text-[13.6px]">
@@ -117,7 +117,7 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
 
           <div className="flex items-center gap-2.5">
             <button onClick={()=>setLang(lang==='en'?'bn':'en')}
-              className={`hidden sm:flex items-center gap-1.5 px-3 h-9 rounded-full text-[12.5px] font-[600] transition-colors ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass hover:border-yellow-500/30"}`}>
+              className={`flex items-center gap-1.5 px-3 h-9 rounded-full text-[12.5px] font-[600] transition-colors ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass hover:border-yellow-500/30"}`}>
               <Globe size={14}/> {lang==='en'?'BN':'EN'}
             </button>
             <button onClick={toggle}
@@ -148,10 +148,9 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
                 </NavLink>
               ))}
             </div>
-            <div className="flex gap-2 mt-3">
-              <button onClick={()=>{setLang(lang==='en'?'bn':'en');setOpen(false)}} className={`flex-1 px-3 py-2 rounded-xl text-[12.5px] font-[600] ${lt?"bg-[#f0e6cf] text-[#6b5328]":"glass"}`}>{lang==='en'?'BN':'EN'}</button>
-              <Link to="/cv" onClick={()=>setOpen(false)} className="flex-1">
-                <div className="w-full text-center px-3 py-2 rounded-xl bg-[#e7b84b] text-[#141010] font-[650] text-[13px]">CV</div>
+            <div className="mt-3">
+              <Link to="/cv" onClick={()=>setOpen(false)} className="block w-full">
+                <div className="w-full text-center px-3 py-2.5 rounded-xl bg-[#e7b84b] text-[#141010] font-[650] text-[13px]">CV</div>
               </Link>
             </div>
           </motion.div>
@@ -184,8 +183,7 @@ function Footer({ lang }:{lang:Lang}){
               <div>
                 <div className={`text-[12px] font-mono uppercase tracking-[0.18em] mb-2 ${lt?"text-[#a0782e]":"text-[#e7c879]"}`}>{t("LET'S WORK TOGETHER","চলুন একসাথে কাজ করি",lang)}</div>
                 <div className={`text-[22px] md:text-[28px] font-[720] tracking-[-0.013em] leading-tight ${lt?"text-[#1a1a1f]":"text-white"}`}>
-                  {t("Have a project in mind?","কোনো প্রজেক্ট মাথায় আছে?",lang)}<br className="hidden sm:block"/>
-                  <span className="gold-text">{t("Let's bring it to life.","চলুন বাস্তবে রূপ দিই।",lang)}</span>
+                  {t("Have a project in mind?","কোনো প্রজেক্ট মাথায় আছে?",lang)}<br className="hidden sm:block"/> <span className="gold-text">{t("Let's bring it to life.","চলুন বাস্তবে রূপ দিই।",lang)}</span>
                 </div>
               </div>
               <div className="flex gap-3 flex-wrap">
@@ -361,7 +359,7 @@ function BackToTop(){
   if(!show) return null
   return (
     <button onClick={()=>scrollTo({top:0,behavior:'smooth'})}
-      className="fixed bottom-5 left-5 z-40 w-11 h-11 rounded-full glass flex items-center justify-center hover:border-yellow-500/30">
+      className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full glass flex items-center justify-center hover:border-yellow-500/30">
       <Rocket size={16} className="text-[#f0c76a]" />
     </button>
   )

@@ -107,10 +107,6 @@ body {
 .blur-reveal { filter: blur(9px); opacity:.01; transform: translateY(14px); }
 .split-char { display:inline-block; }
 
-/* custom cursor hidden on touch */
-@media (pointer: fine) {
-  * { cursor: none !important; }
-}
 
 /* marquee */
 @keyframes marquee-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }

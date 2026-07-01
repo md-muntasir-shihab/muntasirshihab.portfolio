@@ -1,8 +1,8 @@
-// src/hooks/useAuth.ts
-// Unified Auth Hook — Firebase (primary) বা Demo (fallback)
+// src/hooks/useAuth.tsx
+// Unified Auth Hook — Firebase (primary) বা Demo (fallback) with global context
 // Firebase configured থাকলে Firebase Auth, না থাকলে demo auth
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from "react"
 import {
   firebaseLogin,
   firebaseLogout,
@@ -21,7 +21,17 @@ export interface AuthUser {
   provider: "firebase" | "demo"
 }
 
-export function useAuth() {
+interface AuthContextType {
+  user: AuthUser | null
+  loading: boolean
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  logout: () => Promise<void>
+  isFirebaseConfigured: boolean
+}
+
+const AuthContext = createContext<AuthContextType | null>(null)
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -72,47 +82,39 @@ export function useAuth() {
   }, [])
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    // Firebase Auth attempt
     if (isFirebaseConfigured) {
       try {
         await firebaseLogin(email, password)
         return { success: true }
       } catch (err: any) {
-        const code = err?.code || ""
-        let msg = "Login failed"
-        if (code === "auth/invalid-credential") msg = "Invalid email or password"
-        else if (code === "auth/too-many-requests") msg = "Too many attempts. Try later."
-        else if (code === "auth/user-not-found") msg = "User not found"
-        else if (code === "auth/wrong-password") msg = "Wrong password"
-        else if (code === "auth/invalid-email") msg = "Invalid email format"
-        else msg = err?.message || "Login failed"
-        return { success: false, error: msg }
+        // Firebase login failed — fall through to demo check
       }
+    }
+    // Demo fallback (always available)
+    if (adminSecurity.isLocked()) {
+      return { success: false, error: `Account locked. Try again in ${adminSecurity.lockRemainingMin()} min.` }
+    }
+    if (/['"<>;]|--|\bOR\b|\bUNION\b/i.test(email)) {
+      return { success: false, error: "Invalid characters detected." }
+    }
+    if (email.trim().toLowerCase() === adminSecurity.EMAIL && password === adminSecurity.PASSWORD) {
+      adminSecurity.reset()
+      sessionStorage.setItem("rm_admin_authed", "1")
+      setUser({
+        uid: "demo-admin",
+        email: adminSecurity.EMAIL,
+        displayName: "Admin (Demo)",
+        photoURL: null,
+        provider: "demo",
+      })
+      return { success: true }
     } else {
-      // Demo mode
+      adminSecurity.registerFail()
       if (adminSecurity.isLocked()) {
-        return { success: false, error: `Account locked. Try again in ${adminSecurity.lockRemainingMin()} min.` }
+        return { success: false, error: "5 failed attempts — account locked for 10 minutes." }
       }
-      if (/['"<>;]|--|\bOR\b|\bUNION\b/i.test(email)) {
-        return { success: false, error: "Invalid characters detected." }
-      }
-      if (email.trim().toLowerCase() === adminSecurity.EMAIL && password === adminSecurity.PASSWORD) {
-        adminSecurity.reset()
-        sessionStorage.setItem("rm_admin_authed", "1")
-        setUser({
-          uid: "demo-admin",
-          email: adminSecurity.EMAIL,
-          displayName: "Admin (Demo)",
-          photoURL: null,
-          provider: "demo",
-        })
-        return { success: true }
-      } else {
-        adminSecurity.registerFail()
-        if (adminSecurity.isLocked()) {
-          return { success: false, error: "5 failed attempts — account locked for 10 minutes." }
-        }
-        return { success: false, error: `Invalid credentials. ${adminSecurity.failsLeft()} attempt(s) left.` }
-      }
+      return { success: false, error: `Invalid credentials. ${adminSecurity.failsLeft()} attempt(s) left.` }
     }
   }, [])
 
@@ -126,7 +128,19 @@ export function useAuth() {
     window.location.href = "/"
   }, [])
 
-  return { user, loading, login, logout, isFirebaseConfigured }
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, isFirebaseConfigured }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider")
+  }
+  return context
 }
 
 export { isFirebaseConfigured }

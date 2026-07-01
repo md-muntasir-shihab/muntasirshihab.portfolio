@@ -5,9 +5,9 @@ import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, St
 import { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, type Lang, ADMIN_SLUG, sectionVisibility } from "./lib/data"
 import { StoreProvider, useStore, sanitize } from "./lib/store"
 import { supabase } from "./lib/supabase"
-import { useAuth } from "./hooks/useAuth"
+import { useAuth, AuthProvider } from "./hooks/useAuth"
 import { sendContactNotification } from "./lib/email"
-import { incrementCvDownload, getCvDownloadCount } from "./lib/upstash"
+import { incrementCvDownload, getCvDownloadCount, incrementVisitorCount } from "./lib/upstash"
 import { GitHubLiveStats } from "./components/GitHubLiveStats"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
@@ -60,16 +60,21 @@ const SectionWrapper = ({ enabled, data, children }: { enabled: boolean, data?: 
 export default function App(){
   const [lang, setLang] = useState<Lang>(()=> (localStorage.getItem("rm_lang") as Lang) || "en")
   useEffect(()=>{ localStorage.setItem("rm_lang", lang); document.documentElement.lang = lang }, [lang])
+  useEffect(()=>{
+    incrementVisitorCount().catch(err => console.error("Failed to increment visitor count:", err))
+  }, [])
   return (
     <ThemeProvider>
-      <StoreProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/*" element={<PublicApp lang={lang} setLang={setLang} />} />
-            <Route path={`/${ADMIN_SLUG}/*`} element={<AdminApp lang={lang} setLang={setLang} />} />
-          </Routes>
-        </BrowserRouter>
-      </StoreProvider>
+      <AuthProvider>
+        <StoreProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/*" element={<PublicApp lang={lang} setLang={setLang} />} />
+              <Route path={`/${ADMIN_SLUG}/*`} element={<AdminApp lang={lang} setLang={setLang} />} />
+            </Routes>
+          </BrowserRouter>
+        </StoreProvider>
+      </AuthProvider>
     </ThemeProvider>
   )
 }
@@ -319,14 +324,17 @@ function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
           <MagicCard>
             <div className={`text-[12px] font-mono mb-4 ${lt?"text-[#a0782e]":"text-[#e4c274]"}`}>{t("PERSONAL DETAILS","ব্যক্তিগত তথ্য",lang)}</div>
             <div className={`grid sm:grid-cols-2 gap-x-6 gap-y-3 text-[13.5px] ${lt?"text-[#5a5449]":"text-[#c6cad6]"}`}>
-              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Date of Birth:","জন্ম তারিখ:",lang)}</span> <strong className={lt?"text-[#a0782e]":"text-[#e8d29a]"}>{profile.personalDetails.dob}</strong></div>
+              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Date of Birth:","জন্ম তারিখ:",lang)}</span> <strong className={lt?"text-[#a0782e]":"text-[#e8d29a]"}>{profile.personalDetails.dob[lang]}</strong></div>
               <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Blood Group:","রক্তের গ্রুপ:",lang)}</span> <strong className={lt?"text-[#a0782e]":"text-[#e8d29a]"}>{profile.personalDetails.bloodGroup}</strong></div>
               <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Gender:","লিঙ্গ:",lang)}</span> {profile.personalDetails.gender[lang]}</div>
+              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Nationality:","জাতীয়তা:",lang)}</span> {profile.personalDetails.nationality[lang]}</div>
               <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Religion:","ধর্ম:",lang)}</span> {profile.personalDetails.religion[lang]}</div>
-              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Father:","পিতা:",lang)}</span> {profile.personalDetails.fatherName[lang]}</div>
-              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Mother:","মাতা:",lang)}</span> {profile.personalDetails.motherName[lang]}</div>
+              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Marital Status:","বৈবাহিক অবস্থা:",lang)}</span> {profile.personalDetails.maritalStatus[lang]}</div>
+              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Birth Place:","জন্মস্থান:",lang)}</span> {profile.personalDetails.placeOfBirth[lang]}</div>
+              <div><span className={lt?"text-[#8a8278]":"text-[#8e94a3]"}>{t("Occupation:","বর্তমান পেশা:",lang)}</span> {profile.personalDetails.occupation[lang]}</div>
             </div>
             <div className={`mt-5 pt-4 border-t text-[13px] space-y-3 ${lt?"border-[#e5e0d4]":"border-white/[0.08]"}`}>
+              <div><div className={`font-mono text-[11.5px] uppercase ${lt?"text-[#8a8278]":"text-[#8e94a3]"}`}>{t("Academic Info:","একাডেমিক তথ্য:",lang)}</div><div className={`mt-1 ${lt?"text-[#3a3730]":"text-[#d7dbe6]"}`}>{profile.personalDetails.academicStatus[lang]} ({profile.personalDetails.department[lang]} Dept, {profile.personalDetails.university[lang]})</div></div>
               <div><div className={`font-mono text-[11.5px] uppercase ${lt?"text-[#8a8278]":"text-[#8e94a3]"}`}>{t("Present Address:","বর্তমান ঠিকানা:",lang)}</div><div className={`mt-1 ${lt?"text-[#3a3730]":"text-[#d7dbe6]"}`}>{profile.personalDetails.presentAddress[lang]}</div></div>
               <div><div className={`font-mono text-[11.5px] uppercase ${lt?"text-[#8a8278]":"text-[#8e94a3]"}`}>{t("Permanent Address:","স্থায়ী ঠিকানা:",lang)}</div><div className={`mt-1 ${lt?"text-[#3a3730]":"text-[#d7dbe6]"}`}>{profile.personalDetails.permanentAddress[lang]}</div></div>
             </div>
@@ -335,7 +343,7 @@ function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
         <div className="space-y-5">
           <MagicCard>
             <div className={`text-[12px] font-mono ${lt?"text-[#a0782e]":"text-[#e4c274]"}`}>{t("EDUCATION","শিক্ষাগত যোগ্যতা",lang)}</div>
-            {education.map(ed=>(<div key={ed.school} className="mt-3"><div className={`text-[16px] font-[630] ${lt?"text-[#1a1a1f]":""}`}>{ed.degree[lang]}</div><div className={`text-[13.5px] ${lt?"text-[#a0782e]":"text-[#d5b96f]"}`}>{ed.school}</div><div className={`text-[13px] mt-1 ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{ed.period} | {ed.note[lang]}</div></div>))}
+            {education.map((ed,i)=>(<div key={`${ed.school}-${ed.period}`} className="mt-3"><div className={`text-[16px] font-[630] ${lt?"text-[#1a1a1f]":""}`}>{ed.degree[lang]}</div><div className={`text-[13.5px] ${lt?"text-[#a0782e]":"text-[#d5b96f]"}`}>{ed.school}</div><div className={`text-[13px] mt-1 ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{ed.period} | {ed.note[lang]}</div></div>))}
           </MagicCard>
           <SectionWrapper enabled={sectionVisibility.achievements} data={achievements}>
             <MagicCard>
@@ -594,7 +602,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     setSent(true)
     setSending(false)
   }
-  const inputCls = `w-full mt-[6px] px-4 h-[46px] rounded-[12px] outline-none ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f]":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40"}`
+  const inputCls = `w-full mt-[6px] px-4 h-[46px] rounded-[12px] outline-none cursor-text ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f] caret-amber-600":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b]"}`
   return (
     <PageShell bg={bgMap["/contact"]} lang={lang} setLang={setLang} title={t("Contact","যোগাযোগ",lang)} subtitle={t("Get in Touch | Hire Me | Send a Message","যোগাযোগ করুন | নিয়োগ | মেসেজ পাঠান",lang)}>
       <div className="max-w-6xl mx-auto px-5 md:px-8 mt-8">
@@ -726,7 +734,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                   <div>
                     <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Message","মেসেজ",lang)} *</label>
                     <textarea required rows={5} value={form.message} onChange={e=>handleChange("message",e.target.value)}
-                      className={`w-full mt-[6px] px-4 py-3 rounded-[12px] outline-none ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f]":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40"}`}
+                      className={`w-full mt-[6px] px-4 py-3 rounded-[12px] outline-none cursor-text ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f] caret-amber-600":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b]"}`}
                       placeholder={t("Write your message here...","আপনার মেসেজ লিখুন...",lang)} />
                   </div>
                   <ShimmerButton className="w-full justify-center" onClick={undefined}>{sending ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"/> : <Send size={15}/>} {sending ? t("Sending...","পাঠানো হচ্ছে...",lang) : t("Send Message","মেসেজ পাঠান",lang)}</ShimmerButton>
@@ -865,17 +873,20 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
   const [tfa, setTfa] = useState<boolean>(()=> sessionStorage.getItem("rm_admin_2fa")==="1")
   const [menuOpen, setMenuOpen] = useState(false)
 
+  // 2FA disabled — will be enabled when admin turns it on from Security panel
+  const tfaEnabled = localStorage.getItem("rm_admin_2fa_enabled") === "1"
+
   // BUG-001 fix: determine active panel from the URL (after the secret slug)
   const sub = location.pathname.replace(`/${ADMIN_SLUG}`, "").replace(/^\//, "") || ""
   const activeKey = (ADMIN_MENU.find(m => m[1] === `/${sub}`) || ADMIN_MENU[0])[0]
 
   if(loading) return (
-    <div className="min-h-screen bg-[#07070b] flex items-center justify-center">
+    <div className="min-h-screen bg-[#07070b] flex items-center justify-center cursor-default">
       <div className="text-[#a3a7b4] text-[14px] animate-pulse">{t("Loading...","লোড হচ্ছে...",lang)}</div>
     </div>
   )
-  if(!user) return <AdminLogin />
-  if(!tfa) return <Admin2FA onVerify={()=>{ setTfa(true); sessionStorage.setItem("rm_admin_2fa","1") }} />
+  if(!user) return <AdminLogin lang={lang} />
+  if(tfaEnabled && !tfa) return <Admin2FA onVerify={()=>{ setTfa(true); sessionStorage.setItem("rm_admin_2fa","1") }} />
 
   const logout = ()=>{ authLogout() }
   const label = (raw:string)=> raw.split("|")[lang==="bn"?1:0]
@@ -884,19 +895,19 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
     <nav className="p-3 text-[13.6px] space-y-1 text-[#bcc1ce]">
       {ADMIN_MENU.map(([key, to, raw])=>(
         <Link key={key} to={`/${ADMIN_SLUG}${to}`} onClick={onNav}
-          className={`block px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] ${activeKey===key ? "bg-white/[0.06] text-[#f4d386]" : ""}`}>
+          className={`block px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] cursor-pointer transition-colors ${activeKey===key ? "bg-white/[0.06] text-[#f4d386]" : ""}`}>
           {label(raw)}
         </Link>
       ))}
       <div className="flex gap-2 mt-3">
-        <button onClick={()=>setLang(lang==="en"?"bn":"en")} className="flex-1 px-3 py-[9px] rounded-[10px] glass text-[12px] font-[600]">{lang==="en"?"বাংলা":"EN"}</button>
+        <button onClick={()=>setLang(lang==="en"?"bn":"en")} className="flex-1 px-3 py-[9px] rounded-[10px] glass text-[12px] font-[600] cursor-pointer hover:bg-white/[0.06] transition">{lang==="en"?"বাংলা":"EN"}</button>
       </div>
-      <button onClick={logout} className="w-full text-left px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] text-[#f29696] mt-1">{t("Logout","লগআউট",lang)}</button>
+      <button onClick={logout} className="w-full text-left px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] text-[#f29696] mt-1 cursor-pointer transition">{t("Logout","লগআউট",lang)}</button>
     </nav>
   )
 
   return (
-    <div className="min-h-screen bg-[#08080f] text-[#e8e9ef]">
+    <div className="min-h-screen bg-[#08080f] text-[#e8e9ef] cursor-default">
       <div className="flex">
         {/* Desktop sidebar */}
         <aside className="w-[270px] hidden lg:block border-r border-white/[0.07] min-h-screen sticky top-0 overflow-y-auto">
@@ -921,10 +932,11 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
         <main className="flex-1 min-w-0">
           <div className="border-b border-white/[0.07] px-5 md:px-8 h-[64px] flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={()=>setMenuOpen(true)} className="lg:hidden w-9 h-9 rounded-[10px] glass flex items-center justify-center"><Menu size={17}/></button>
+              <button onClick={()=>setMenuOpen(true)} aria-label="Open menu" className="lg:hidden w-9 h-9 rounded-[10px] glass flex items-center justify-center cursor-pointer"><Menu size={17}/></button>
               <div className="text-[14.5px]">{t("Portfolio Admin","পোর্টফোলিও অ্যাডমিন",lang)}</div>
             </div>
-            <div className="text-[11.5px] text-[#8f94a2] flex items-center gap-2"><ShieldCheck size={14}/> {t("2FA Enabled","2FA সক্রিয়",lang)}</div>
+            <div className={`text-[11.5px] flex items-center gap-2 ${tfaEnabled?"text-[#8f94a2]":"text-[#7e8391]"}`}><ShieldCheck size={14}/> {tfaEnabled ? t("2FA Enabled","2FA সক্রিয়",lang) : t("2FA Disabled","2FA নিষ্ক্রিয়",lang)}</div>
+            <Link to={`/${ADMIN_SLUG}/security`} className="text-[11px] text-[#d5b96f] hover:underline cursor-pointer">{t("Manage","ম্যানেজ",lang)}</Link>
           </div>
           <div className="p-5 md:p-8">
             <AdminPanel activeKey={activeKey} lang={lang}/>
@@ -972,10 +984,10 @@ function AdminEditor({lang, title, fields}:{lang:Lang, title:string, fields:[str
         {fields.map(([k,v])=>(
           <div key={k}>
             <label className="text-[12px] text-[#9aa0ad]">{k}</label>
-            <input defaultValue={v} className="w-full mt-[6px] px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[14px]"/>
+            <input defaultValue={v} placeholder={k} aria-label={k} className="w-full mt-[6px] px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b] text-[14px] cursor-text"/>
           </div>
         ))}
-        <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.5px]">{t("Save Changes","পরিবর্তন সংরক্ষণ",lang)}</button>
+        <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Save Changes","পরিবর্তন সংরক্ষণ",lang)}</button>
         <div className="text-[11px] text-[#7e8391]">{t("Connect Firebase to persist edits live.","লাইভ সংরক্ষণে Firebase সংযুক্ত করুন।",lang)}</div>
       </div>
     </div>
@@ -987,15 +999,15 @@ function AdminList({lang, title, items}:{lang:Lang, title:string, items:string[]
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div className="text-[24px] font-[720]">{title}</div>
-        <button className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px]">+ {t("Add New","নতুন যোগ",lang)}</button>
+        <button className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] cursor-pointer hover:brightness-110 transition">+ {t("Add New","নতুন যোগ",lang)}</button>
       </div>
       <div className="glass rounded-[18px] p-4 space-y-2">
         {items.map((it,i)=>(
           <div key={i} className="flex items-center justify-between px-4 py-3 rounded-[12px] bg-white/[0.03] border border-white/[0.06]">
             <span className="text-[13.5px] text-[#d2d5de]">{it}</span>
             <div className="flex gap-2 text-[12px]">
-              <button className="px-3 py-[5px] rounded-full glass">{t("Edit","এডিট",lang)}</button>
-              <button className="px-3 py-[5px] rounded-full glass text-[#f29696]">{t("Delete","মুছুন",lang)}</button>
+              <button className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Edit","এডিট",lang)}</button>
+              <button className="px-3 py-[5px] rounded-full glass text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Delete","মুছুন",lang)}</button>
             </div>
           </div>
         ))}
@@ -1014,7 +1026,7 @@ function AdminSections({lang}:{lang:Lang}){
           <div key={key} className="flex items-center justify-between px-4 py-3 rounded-[12px] bg-white/[0.03] border border-white/[0.06]">
             <span className="text-[14px] capitalize">{key}</span>
             <button onClick={()=>setVisibility(key as any, !val)}
-              className={`relative w-12 h-6 rounded-full transition-colors ${val?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
+              className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${val?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
               <span className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all ${val?"left-[27px]":"left-[3px]"}`}/>
             </button>
           </div>
@@ -1083,9 +1095,9 @@ function AdminMessages({lang}:{lang:Lang}){
               <div className="text-[12px] text-[#9aa0ad]">{d.email}{d.phone && ` · ${d.phone}`}</div>
               <div className="text-[13.5px] mt-1">{d.message}</div>
               <div className="flex gap-2 mt-2 text-[12px]">
-                {!d.read && <button onClick={()=>markRead(d.id)} className="px-3 py-[5px] rounded-full glass">{t("Mark read","পঠিত করুন",lang)}</button>}
-                <a href={`mailto:${d.email}`} className="px-3 py-[5px] rounded-full glass">{t("Reply","উত্তর",lang)}</a>
-                <button onClick={()=>deleteMessage(d.id)} className="px-3 py-[5px] rounded-full glass text-[#f29696]">{t("Delete","মুছুন",lang)}</button>
+                {!d.read && <button onClick={()=>markRead(d.id)} className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Mark read","পঠিত করুন",lang)}</button>}
+                <a href={`mailto:${d.email}`} className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Reply","উত্তর",lang)}</a>
+                <button onClick={()=>deleteMessage(d.id)} className="px-3 py-[5px] rounded-full glass text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Delete","মুছুন",lang)}</button>
               </div>
             </div>
           ))}
@@ -1116,11 +1128,11 @@ function AdminCV({lang}:{lang:Lang}){
       <div className="grid md:grid-cols-2 gap-5">
         <div className="glass rounded-[18px] p-5">
           <div className="text-[13px] font-mono text-[#e5c371] mb-3">{t("DESIGNED CV","ডিজাইনড সিভি",lang)}</div>
-          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full">{t("Upload PDF","PDF আপলোড",lang)}</button>
+          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full cursor-pointer hover:bg-white/[0.06] transition">{t("Upload PDF","PDF আপলোড",lang)}</button>
         </div>
         <div className="glass rounded-[18px] p-5">
           <div className="text-[13px] font-mono text-[#e5c371] mb-3">{t("ATS CV","ATS সিভি",lang)}</div>
-          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full">{t("Upload ATS PDF","ATS PDF আপলোড",lang)}</button>
+          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full cursor-pointer hover:bg-white/[0.06] transition">{t("Upload ATS PDF","ATS PDF আপলোড",lang)}</button>
         </div>
       </div>
       <div className="text-[11.5px] text-[#7e8391]">{t("Live download counter syncs via Firebase/Upstash when connected.","সংযুক্ত হলে Firebase/Upstash দিয়ে লাইভ কাউন্টার সিঙ্ক হয়।",lang)}</div>
@@ -1129,16 +1141,36 @@ function AdminCV({lang}:{lang:Lang}){
 }
 
 function AdminSecurity({lang}:{lang:Lang}){
+  const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
+  const toggleTfa = ()=>{
+    if(tfaOn){
+      localStorage.removeItem("rm_admin_2fa_enabled")
+      sessionStorage.removeItem("rm_admin_2fa")
+    } else {
+      localStorage.setItem("rm_admin_2fa_enabled", "1")
+    }
+    window.location.reload()
+  }
   return (
     <div className="space-y-5">
       <div className="text-[24px] font-[720]">{t("Security / 2FA","সিকিউরিটি / 2FA",lang)}</div>
       <div className="glass rounded-[18px] p-5 space-y-3 max-w-xl text-[13.5px]">
-        <div className="flex items-center gap-2 text-[#6ad08a]"><ShieldCheck size={16}/> {t("Two-Factor Authentication: Enabled","টু-ফ্যাক্টর অথেন্টিকেশন: সক্রিয়",lang)}</div>
-        <div className="flex items-center gap-2 text-[#6ad08a]"><UserCheck size={16}/> {t("TOTP provider: otplib","TOTP প্রোভাইডার: otplib",lang)}</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}/>
+            <span className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}>{tfaOn ? t("Two-Factor Authentication: Enabled","টু-ফ্যাক্টর অথেন্টিকেশন: সক্রিয়",lang) : t("Two-Factor Authentication: Disabled","টু-ফ্যাক্টর অথেন্টিকেশন: নিষ্ক্রিয়",lang)}</span>
+          </div>
+          <button onClick={toggleTfa}
+            className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${tfaOn?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
+            <span className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all ${tfaOn?"left-[27px]":"left-[3px]"}`}/>
+          </button>
+        </div>
+        <div className={`flex items-center gap-2 ${tfaOn?"text-[#6ad08a]":"text-[#7e8391]"}`}><UserCheck size={16}/> {t("TOTP provider: otplib (Demo)","TOTP প্রোভাইডার: otplib (ডেমো)",lang)}</div>
         <div className="text-[#c5c9d5]">{t("Active sessions: 1","সক্রিয় সেশন: ১",lang)}</div>
         <div className="text-[#c5c9d5]">{t("Failed logins (24h): 0","ব্যর্থ লগইন (২৪ঘণ্টা): ০",lang)}</div>
-        <button className="px-4 h-10 rounded-full glass text-[13px] text-[#f29696]">{t("Logout all devices","সব ডিভাইস থেকে লগআউট",lang)}</button>
+        <button className="px-4 h-10 rounded-full glass text-[13px] text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Logout all devices","সব ডিভাইস থেকে লগআউট",lang)}</button>
       </div>
+      <div className="text-[11.5px] text-[#7e8391]">{t("Toggle 2FA switch to enable/disable two-factor authentication. When enabled, a 6-digit TOTP code will be required after login.","২এফএ টগল করে টু-ফ্যাক্টর অথেন্টিকেশন চালু/বন্ধ করুন। চালু থাকলে লগইনের পর ৬-ডিজিট TOTP কোড প্রয়োজন হবে।",lang)}</div>
     </div>
   )
 }
@@ -1152,11 +1184,11 @@ function AdminCache({lang}:{lang:Lang}){
         <div>portfolio:public → HIT · 3m TTL</div>
         <div>rate:contact:IP → 1/5 used</div>
       </div>
-      <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px]">{t("Clear All Cache","সব ক্যাশ পরিষ্কার",lang)}</button>
+      <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] cursor-pointer hover:brightness-110 transition">{t("Clear All Cache","সব ক্যাশ পরিষ্কার",lang)}</button>
     </div>
   )
 }
-function AdminLogin(){
+function AdminLogin({lang}:{lang:Lang}){
   const [email,setEmail]=useState("")
   const [pass,setPass]=useState("")
   const [err,setErr]=useState("")
@@ -1170,7 +1202,7 @@ function AdminLogin(){
   }
   const authBadge = fbReady ? t("Firebase Auth","ফায়ারবেস অথ", "en") : t("Demo Mode","ডেমো মোড", "en")
   return (
-    <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5 relative overflow-hidden">
+    <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5 relative overflow-hidden cursor-default">
       <div className="absolute inset-0 opacity-40" style={{background:"radial-gradient(900px 520px at 50% -10%, rgba(231,184,75,0.10), transparent)"}}/>
       <div className="relative w-full max-w-[420px] glass-strong rounded-[22px] p-[26px]">
         <div className="flex items-center justify-between">
@@ -1178,12 +1210,12 @@ function AdminLogin(){
           <div className={`text-[10.5px] px-2 py-[3px] rounded-full ${fbReady?"bg-[#3a5a2a]/40 text-[#8fcf6a] border border-[#5a8a3a]/30":"bg-[#3a3a2a]/40 text-[#d5c46a] border border-[#5a5a3a]/30"}`}>{authBadge}</div>
         </div>
         <div className="text-[24px] font-[720] mt-2">Admin Portal Login</div>
-        <div className="text-[11.5px] text-[#7e8391] mt-1">{fbReady ? t("Sign in with Firebase account","ফায়ারবেস অ্যাকাউন্ট দিয়ে লগইন", "en") : t("Demo: admin@muntasir.dev / Shihab@2026","ডেমো: admin@muntasir.dev / Shihab@2026", "en")}</div>
+        <div className="text-[11.5px] text-[#7e8391] mt-1">{fbReady ? t("Sign in with Firebase account","ফায়ারবেস অ্যাকাউন্ট দিয়ে লগইন", "en") : t("Demo: mm.xihab@gmail.com / Shihab@2026","ডেমো: mm.xihab@gmail.com / Shihab@2026", "en")}</div>
         <form onSubmit={e=>{e.preventDefault(); submit()}} className="mt-6 space-y-4">
-          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} placeholder="admin@email.com" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
-          <input required type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
+          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} placeholder="mm.xihab@gmail.com" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
+          <input required type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
           {err && <div className="text-[12.5px] text-[#f29696] bg-[#2a1414] border border-[#f29696]/20 rounded-[10px] px-3 py-2">{err}</div>}
-          <button disabled={busy} className="w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] disabled:opacity-50 flex items-center justify-center gap-2">{busy ? <span className="w-4 h-4 border-2 border-[#1a1410]/40 border-t-[#1a1410] rounded-full animate-spin"/> : null}{t("Continue to 2FA","2FA তে এগিয়ে যান", "en")}</button>
+          <button type="submit" disabled={busy} className="w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition">{busy ? <span className="w-4 h-4 border-2 border-[#1a1410]/40 border-t-[#1a1410] rounded-full animate-spin"/> : null}{t("Login","লগইন",lang)}</button>
         </form>
       </div>
     </div>
@@ -1198,13 +1230,13 @@ function Admin2FA({onVerify}:{onVerify:()=>void}){
     else setErr("Invalid 2FA code. (Demo code: 246810)")
   }
   return (
-    <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5">
+    <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5 cursor-default">
       <div className="w-full max-w-[420px] glass-strong rounded-[22px] p-[26px] text-center">
         <div className="w-14 h-14 mx-auto rounded-[16px] bg-[#14141f] gold-ring flex items-center justify-center"><Lock size={22} className="text-[#f1cf7a]"/></div>
         <div className="text-[22px] font-[700] mt-4">Two-Factor Authentication</div>
         <div className="text-[13px] text-[#9da2af] mt-1">Enter 6-digit TOTP code (Demo: 246810)</div>
         <input value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,""));setErr("")}} maxLength={6} placeholder="000000"
-          className="mt-5 w-full text-center tracking-[0.42em] text-[26px] font-mono px-4 h-[56px] rounded-[14px] bg-black/30 border border-white/[0.14] outline-none focus:border-yellow-500/50"/>
+          className="mt-5 w-full text-center tracking-[0.42em] text-[26px] font-mono px-4 h-[56px] rounded-[14px] bg-black/30 border border-white/[0.14] outline-none focus:border-yellow-500/50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
         {err && <div className="text-[12.5px] text-[#f29696] mt-3">{err}</div>}
         <button onClick={()=> code.length===6 && verify()} className="mt-4 w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650]">Verify & Enter</button>
       </div>
@@ -1213,6 +1245,7 @@ function Admin2FA({onVerify}:{onVerify:()=>void}){
 }
 function AdminDash({lang}:{lang:Lang}){
   const { messages, cvCount, visibility } = useStore()
+  const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
   return (
     <div className="space-y-6">
       <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Dashboard","ড্যাশবোর্ড",lang)}</div>
@@ -1235,7 +1268,7 @@ function AdminDash({lang}:{lang:Lang}){
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full border border-yellow-500/30 overflow-hidden bg-black/40">
-                {profile.avatar ? <img src={profile.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px]">No Image</div>}
+                {profile.avatar ? <img src={profile.avatar} alt="Profile avatar" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px]">No Image</div>}
               </div>
               <div className="flex-1">
                 <div className="text-[12px] font-[600]">{t("Profile Avatar","প্রোফাইল ছবি",lang)}</div>
@@ -1289,7 +1322,7 @@ function AdminDash({lang}:{lang:Lang}){
       <div className="glass rounded-[18px] p-5">
         <div className="text-[13px] font-mono text-[#e5c371] mb-3">{t("SECURITY","সিকিউরিটি",lang)}</div>
         <ul className="text-[13px] text-[#c5c9d5] space-y-[7px]">
-          <li className="flex gap-2"><UserCheck size={15} className="text-[#6ad08a]"/> {t("2FA: Enabled","2FA: সক্রিয়",lang)}</li>
+          <li className="flex gap-2"><UserCheck size={15} className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}/> {tfaOn ? t("2FA: Enabled","2FA: সক্রিয়",lang) : t("2FA: Disabled","2FA: নিষ্ক্রিয়",lang)}</li>
           <li className="flex gap-2"><ShieldCheck size={15} className="text-[#6ad08a]"/> TOTP: otplib</li>
           <li>{t("Failed logins (24h): 0","ব্যর্থ লগইন (২৪ঘণ্টা): ০",lang)}</li>
         </ul>
