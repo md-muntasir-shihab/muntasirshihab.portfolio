@@ -2,9 +2,13 @@ import { BrowserRouter, Routes, Route, useLocation, Link, useParams, Navigate } 
 import { useEffect, useState, useMemo, useContext } from "react"
 import { motion } from "framer-motion"
 import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, StatTicker, ThemeProvider, ThemeCtx } from "./components/ui-kit"
-import { profile, experience, skills, tools, projects, githubStats, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, type Lang, ADMIN_SLUG, sectionVisibility } from "./lib/data"
-import { StoreProvider, useStore, adminSecurity, sanitize } from "./lib/store"
+import { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, type Lang, ADMIN_SLUG, sectionVisibility } from "./lib/data"
+import { StoreProvider, useStore, sanitize } from "./lib/store"
 import { supabase } from "./lib/supabase"
+import { useAuth } from "./hooks/useAuth"
+import { sendContactNotification } from "./lib/email"
+import { incrementCvDownload, getCvDownloadCount } from "./lib/upstash"
+import { GitHubLiveStats } from "./components/GitHubLiveStats"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
   ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu
@@ -439,39 +443,7 @@ function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
           </div>
         )}
         {tab==="github" && (
-          <div className="grid lg:grid-cols-3 gap-5">
-            <div className="lg:col-span-2 space-y-5">
-              <MagicCard>
-                <div className={`text-[12px] font-mono mb-4 ${lt?"text-[#a0782e]":"text-[#e5c371]"}`}>{t("CONTRIBUTION HEATMAP","কন্ট্রিবিউশন হিটম্যাপ",lang)}</div>
-                <div className="grid grid-cols-[repeat(52,minmax(0,1fr))] gap-[3.5px]">
-                  {Array.from({length:364}).map((_,i)=>{
-                    const intensity = [0.07,0.17,0.30,0.52,0.8][Math.floor(Math.random()*5)]
-                    return <div key={i} className="aspect-square rounded-[3px]" style={{background:`rgba(231,184,75,${intensity})`}}/>
-                  })}
-                </div>
-                <div className={`flex gap-6 mt-5 text-[12.5px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>
-                  <span>{t("Contributions","কন্ট্রিবিউশন",lang)}: <b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.contributions}</b></span>
-                  <span>{t("Streak","ধারাবাহিক",lang)}: <b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.streak}</b></span>
-                  <span>{t("Repos","রিপো",lang)}: <b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.repos}</b></span>
-                </div>
-              </MagicCard>
-            </div>
-            <div className="space-y-5">
-              <MagicCard>
-                <div className={`text-[12px] font-mono mb-3 ${lt?"text-[#a0782e]":"text-[#e5c371]"}`}>{t("LANGUAGE MIX","ভাষার মিশ্রণ",lang)}</div>
-                <div className="w-full aspect-square rounded-full" style={{background:`conic-gradient(#f3d27a 0 ${githubStats.langs[0].pct}%, #d6a94a ${githubStats.langs[0].pct}% ${githubStats.langs[0].pct+githubStats.langs[1].pct}%, #8b6d2f ${githubStats.langs[0].pct+githubStats.langs[1].pct}% 100%)`}}/>
-                <div className="grid grid-cols-2 gap-[8px] text-[12px] mt-4">{githubStats.langs.map(l=><div key={l.name} className="flex items-center justify-between"><span>{l.name}</span><span className={lt?"text-[#a0782e]":"text-[#e7c87a]"}>{l.pct}%</span></div>)}</div>
-              </MagicCard>
-              <MagicCard>
-                <div className={`text-[12px] font-mono mb-2 ${lt?"text-[#a0782e]":"text-[#e5c371]"}`}>{t("STATS","পরিসংখ্যান",lang)}</div>
-                <div className="text-[13.5px] space-y-[8px]">
-                  <div className="flex justify-between"><span>{t("Stars","স্টার",lang)}</span><b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.stars}</b></div>
-                  <div className="flex justify-between"><span>{t("Followers","ফলোয়ার",lang)}</span><b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.followers}</b></div>
-                  <div className="flex justify-between"><span>{t("Repos","রিপো",lang)}</span><b className={lt?"text-[#a0782e]":"text-[#f0cf85]"}>{githubStats.repos}</b></div>
-                </div>
-              </MagicCard>
-            </div>
-          </div>
+          <GitHubLiveStats lang={lang} light={lt} />
         )}
       </div>
     </PageShell>
@@ -572,22 +544,25 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const { addMessage } = useStore()
   const [sent,setSent]=useState(false)
   const [rateLimited,setRateLimited]=useState(false)
+  const [sending,setSending]=useState(false)
   const [form,setForm]=useState({name:"",email:"",phone:"",message:""})
   const handleChange=(field:string,val:string)=>setForm(p=>({...p,[field]:val}))
   const submit=async()=>{
+    setSending(true)
     // Client-side rate limit: max 5 submissions / hour
     const now=Date.now()
     let hits:number[]=[]
     try{ hits = JSON.parse(localStorage.getItem("rm_contact_hits")||"[]") }catch{ hits=[] }
     hits = hits.filter(h=> now-h < 3600_000)
-    if(hits.length>=5){ setRateLimited(true); return }
+    if(hits.length>=5){ setRateLimited(true); setSending(false); return }
     hits.push(now); localStorage.setItem("rm_contact_hits", JSON.stringify(hits))
-    
+
     // Sanitize data
     const cleanName = sanitize(form.name)
     const cleanEmail = sanitize(form.email)
     const cleanPhone = sanitize(form.phone)
     const cleanMessage = sanitize(form.message)
+    const timestamp = new Date().toISOString()
 
     // Store to local admin inbox
     addMessage({
@@ -595,21 +570,29 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       phone: cleanPhone, message: cleanMessage,
     })
 
-    // Store to Supabase Database
-    try {
-      const { error } = await supabase
+    // Store to Supabase Database (parallel with email)
+    // Send email notification via Resend (parallel with Supabase)
+    const [supaResult, emailResult] = await Promise.allSettled([
+      supabase
         .from('messages')
-        .insert([{ name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, created_at: new Date().toISOString() }])
-      
-      if (error) {
-        console.error('Supabase insert error:', error)
-        // Even if DB fails, we show success to user (local storage works)
-      }
-    } catch (err) {
-      console.error('Supabase connection error:', err)
+        .insert([{ name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, created_at: timestamp }]),
+      sendContactNotification({ name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, timestamp }),
+    ])
+
+    if (supaResult.status === 'rejected') {
+      console.error('Supabase connection error:', supaResult.reason)
+    } else if (supaResult.value.error) {
+      console.error('Supabase insert error:', supaResult.value.error)
+    }
+
+    if (emailResult.status === 'fulfilled' && emailResult.value) {
+      console.log('[Contact] Email notification sent successfully')
+    } else if (emailResult.status === 'rejected') {
+      console.error('[Contact] Email notification failed:', emailResult.reason)
     }
 
     setSent(true)
+    setSending(false)
   }
   const inputCls = `w-full mt-[6px] px-4 h-[46px] rounded-[12px] outline-none ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f]":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40"}`
   return (
@@ -746,7 +729,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                       className={`w-full mt-[6px] px-4 py-3 rounded-[12px] outline-none ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f]":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40"}`}
                       placeholder={t("Write your message here...","আপনার মেসেজ লিখুন...",lang)} />
                   </div>
-                  <ShimmerButton className="w-full justify-center"><Send size={15}/> {t("Send Message","মেসেজ পাঠান",lang)}</ShimmerButton>
+                  <ShimmerButton className="w-full justify-center" onClick={undefined}>{sending ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"/> : <Send size={15}/>} {sending ? t("Sending...","পাঠানো হচ্ছে...",lang) : t("Send Message","মেসেজ পাঠান",lang)}</ShimmerButton>
                 </form>
               ) : (
                 <div className="py-10 text-center">
@@ -804,8 +787,17 @@ ${services.map(s=>`${s.title.en} — ${s.desc.en} (${s.time})`).join('\n')}
 
 function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const { cvCount, incCv } = useStore()
-  const handleDownload=()=>{ incCv(); generateCV() }
-  const count = cvCount
+  const [liveCount, setLiveCount] = useState<number|null>(null)
+  useEffect(()=>{ getCvDownloadCount().then(setLiveCount) }, [])
+  const handleDownload=async()=>{
+    incCv()
+    generateCV()
+    // Upstash এ real download count increment করো
+    const newCount = await incrementCvDownload()
+    if(newCount>0) setLiveCount(newCount)
+  }
+  // Live count থাকলে সেটা দেখাও, না হলে local count
+  const count = liveCount ?? cvCount
   return (
     <PageShell bg={bgMap["/cv"]} lang={lang} setLang={setLang} title={t("CV / Resume","সিভি / রেজুমে",lang)} subtitle="PDF">
       <div className="max-w-5xl mx-auto px-5 md:px-8 mt-8 grid lg:grid-cols-[1.18fr_.82fr] gap-7">
@@ -869,7 +861,7 @@ const ADMIN_MENU: [string, string, string][] = [
 
 function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
   const location = useLocation()
-  const [authed, setAuthed] = useState<boolean>(()=> sessionStorage.getItem("rm_admin_authed")==="1")
+  const { user, loading, logout: authLogout } = useAuth()
   const [tfa, setTfa] = useState<boolean>(()=> sessionStorage.getItem("rm_admin_2fa")==="1")
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -877,10 +869,15 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
   const sub = location.pathname.replace(`/${ADMIN_SLUG}`, "").replace(/^\//, "") || ""
   const activeKey = (ADMIN_MENU.find(m => m[1] === `/${sub}`) || ADMIN_MENU[0])[0]
 
-  if(!authed) return <AdminLogin onLogin={()=>{ setAuthed(true); sessionStorage.setItem("rm_admin_authed","1") }} />
+  if(loading) return (
+    <div className="min-h-screen bg-[#07070b] flex items-center justify-center">
+      <div className="text-[#a3a7b4] text-[14px] animate-pulse">{t("Loading...","লোড হচ্ছে...",lang)}</div>
+    </div>
+  )
+  if(!user) return <AdminLogin />
   if(!tfa) return <Admin2FA onVerify={()=>{ setTfa(true); sessionStorage.setItem("rm_admin_2fa","1") }} />
 
-  const logout = ()=>{ sessionStorage.removeItem("rm_admin_authed"); sessionStorage.removeItem("rm_admin_2fa"); window.location.href="/" }
+  const logout = ()=>{ authLogout() }
   const label = (raw:string)=> raw.split("|")[lang==="bn"?1:0]
 
   const SidebarNav = ({onNav}:{onNav?:()=>void}) => (
@@ -1159,36 +1156,34 @@ function AdminCache({lang}:{lang:Lang}){
     </div>
   )
 }
-function AdminLogin({onLogin}:{onLogin:()=>void}){
+function AdminLogin(){
   const [email,setEmail]=useState("")
   const [pass,setPass]=useState("")
   const [err,setErr]=useState("")
-  const [locked,setLocked]=useState(adminSecurity.isLocked())
-  const submit=()=>{
-    if(adminSecurity.isLocked()){ setLocked(true); setErr(`Account locked. Try again in ${adminSecurity.lockRemainingMin()} min.`); return }
-    // Block injection-style payloads defensively
-    if(/['"<>;]|--|\bOR\b|\bUNION\b/i.test(email)){ setErr("Invalid characters detected."); return }
-    if(email.trim().toLowerCase()===adminSecurity.EMAIL && pass===adminSecurity.PASSWORD){
-      adminSecurity.reset(); onLogin()
-    } else {
-      const s=adminSecurity.registerFail()
-      if(adminSecurity.isLocked()){ setLocked(true); setErr("5 failed attempts — account locked for 10 minutes.") }
-      else setErr(`Invalid credentials. ${adminSecurity.failsLeft()} attempt(s) left.`)
-      void s
-    }
+  const [busy,setBusy]=useState(false)
+  const { login, isFirebaseConfigured: fbReady } = useAuth()
+  const submit=async()=>{
+    setErr(""); setBusy(true)
+    const result = await login(email.trim(), pass)
+    setBusy(false)
+    if(!result.success){ setErr(result.error || "Login failed") }
   }
+  const authBadge = fbReady ? t("Firebase Auth","ফায়ারবেস অথ", "en") : t("Demo Mode","ডেমো মোড", "en")
   return (
     <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5 relative overflow-hidden">
       <div className="absolute inset-0 opacity-40" style={{background:"radial-gradient(900px 520px at 50% -10%, rgba(231,184,75,0.10), transparent)"}}/>
       <div className="relative w-full max-w-[420px] glass-strong rounded-[22px] p-[26px]">
-        <div className="text-[12px] font-mono text-[#e5c371]">SECRET ADMIN</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[12px] font-mono text-[#e5c371]">SECRET ADMIN</div>
+          <div className={`text-[10.5px] px-2 py-[3px] rounded-full ${fbReady?"bg-[#3a5a2a]/40 text-[#8fcf6a] border border-[#5a8a3a]/30":"bg-[#3a3a2a]/40 text-[#d5c46a] border border-[#5a5a3a]/30"}`}>{authBadge}</div>
+        </div>
         <div className="text-[24px] font-[720] mt-2">Admin Portal Login</div>
-        <div className="text-[11.5px] text-[#7e8391] mt-1">Demo: admin@muntasir.dev / Shihab@2026</div>
+        <div className="text-[11.5px] text-[#7e8391] mt-1">{fbReady ? t("Sign in with Firebase account","ফায়ারবেস অ্যাকাউন্ট দিয়ে লগইন", "en") : t("Demo: admin@muntasir.dev / Shihab@2026","ডেমো: admin@muntasir.dev / Shihab@2026", "en")}</div>
         <form onSubmit={e=>{e.preventDefault(); submit()}} className="mt-6 space-y-4">
-          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} placeholder="admin@email.com" disabled={locked} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
-          <input required type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={locked} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
+          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} placeholder="admin@email.com" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
+          <input required type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50"/>
           {err && <div className="text-[12.5px] text-[#f29696] bg-[#2a1414] border border-[#f29696]/20 rounded-[10px] px-3 py-2">{err}</div>}
-          <button disabled={locked} className="w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] disabled:opacity-50">Continue to 2FA</button>
+          <button disabled={busy} className="w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] disabled:opacity-50 flex items-center justify-center gap-2">{busy ? <span className="w-4 h-4 border-2 border-[#1a1410]/40 border-t-[#1a1410] rounded-full animate-spin"/> : null}{t("Continue to 2FA","2FA তে এগিয়ে যান", "en")}</button>
         </form>
       </div>
     </div>
