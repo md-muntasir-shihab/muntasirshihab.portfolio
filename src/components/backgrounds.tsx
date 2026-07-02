@@ -167,61 +167,7 @@ function ParticleGrid(){
 /* ---- canvas utilities ---- */
 
 function ParticleNetwork({color="#e7b84b", density=55, linkDist=130, speed=0.45}:{color?:string, density?:number, linkDist?:number, speed?:number}){
-  const ref = useRef<HTMLCanvasElement>(null)
-  useEffect(()=>{
-    const canvas = ref.current!
-    const ctx = canvas.getContext('2d', { alpha: true })!
-    let w = canvas.width = window.innerWidth
-    let h = canvas.height = window.innerHeight
-    const onR=()=>{ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight }
-    window.addEventListener('resize', onR)
-    const isMobile = window.innerWidth < 768
-    const finalDensity = isMobile ? Math.min(15, density) : density
-    const n = Math.min(finalDensity, Math.round((w*h)/35000))
-    const pts = Array.from({length:n}).map(()=>({
-      x: Math.random()*w, y: Math.random()*h,
-      vx: (Math.random()-.5)*speed, vy: (Math.random()-.5)*speed
-    }))
-    let raf=0, mouse={x:-9999,y:-9999}
-    const mm=(e:MouseEvent)=>{ mouse.x=e.clientX; mouse.y=e.clientY }
-    window.addEventListener('mousemove', mm)
-    const draw=()=>{
-      ctx.clearRect(0,0,w,h)
-      for(const p of pts){
-        p.x+=p.vx; p.y+=p.vy
-        if(p.x<0||p.x>w) p.vx*=-1
-        if(p.y<0||p.y>h) p.vy*=-1
-        // mouse attract tiny
-        const dx = mouse.x-p.x, dy = mouse.y-p.y
-        const d = Math.sqrt(dx*dx+dy*dy)
-        if(d<170){ p.vx += dx*0.00004; p.vy += dy*0.00004 }
-      }
-      // links
-      ctx.lineWidth = 1
-      for(let i=0;i<pts.length;i++){
-        for(let j=i+1;j<pts.length;j++){
-          const a=pts[i], b=pts[j]
-          const dx=a.x-b.x, dy=a.y-b.y
-          const dist=Math.sqrt(dx*dx+dy*dy)
-          if(dist<linkDist){
-            ctx.strokeStyle = hexA(color, 0.10*(1-dist/linkDist))
-            ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke()
-          }
-        }
-      }
-      // nodes
-      for(const p of pts){
-        ctx.beginPath()
-        ctx.fillStyle = hexA(color, 0.75)
-        ctx.arc(p.x,p.y,1.45,0,Math.PI*2)
-        ctx.fill()
-      }
-      raf=requestAnimationFrame(draw)
-    }
-    draw()
-    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',onR); window.removeEventListener('mousemove', mm) }
-  }, [color,density,linkDist,speed])
-  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />
+  return null
 }
 
 function StarFieldCanvas(){
