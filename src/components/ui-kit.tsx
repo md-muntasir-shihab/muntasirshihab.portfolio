@@ -254,7 +254,7 @@ export function Footer({ lang }:{lang:Lang}){
             </div>
 
             {/* Pages */}
-            <div>
+            <div className="hidden md:block">
               <div className={`text-[11.5px] font-mono uppercase tracking-[0.18em] mb-4 ${lt?"text-[#a0782e]":"text-[#e7c879]"}`}>{t("EXPLORE","অন্বেষণ",lang)}</div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 text-[13.5px]">
                 {[

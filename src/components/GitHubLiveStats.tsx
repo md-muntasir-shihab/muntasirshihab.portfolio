@@ -205,7 +205,7 @@ export function GitHubLiveStats({ lang, light = false }: Props) {
       {/* Right column */}
       <div className="space-y-5">
         {/* Language Mix */}
-        <div className="glass rounded-[18px] p-5">
+        <div className="glass rounded-[18px] p-5 hidden lg:block">
           <div className={`text-[12px] font-mono mb-3 ${monoAccent}`}>{t("LANGUAGE MIX", "ভাষার মিশ্রণ", lang)}</div>
           <div
             className="w-full aspect-square rounded-full"

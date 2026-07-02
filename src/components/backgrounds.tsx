@@ -166,7 +166,7 @@ function ParticleGrid(){
 
 /* ---- canvas utilities ---- */
 
-function ParticleNetwork({color="#e7b84b", density=55, linkDist=130, speed=0.45}:{color?:string, density?:number, linkDist?:number, speed?:number}){
+function ParticleNetwork(_: {color?:string, density?:number, linkDist?:number, speed?:number}){
   return null
 }
 
@@ -404,7 +404,7 @@ function WavyBottom(){
   )
 }
 
-function hexA(hex:string, a:number){
+export function hexA(hex:string, a:number){
   const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16)
   return `rgba(${r},${g},${b},${a})`
 }

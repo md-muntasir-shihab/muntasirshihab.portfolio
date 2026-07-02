@@ -1,13 +1,13 @@
 import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
-import { sendCustomEmail, EMAIL_TEMPLATES, type EmailTemplateId, type EmailConfig } from "../../lib/email"
+import { sendCustomEmail, type EmailConfig } from "../../lib/email"
 import { Check, Send, Mail, Key, AtSign, Loader2, ChevronDown, FileText, X } from "lucide-react"
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
 export default function ContactHireManager({ lang }: { lang: Lang }) {
-  const { hireMe, updateHireMe, messages } = useStore()
+  const { hireMe, updateHireMe, messages, emailTemplates } = useStore()
   const [formData, setFormData] = useState({
     statusEn: hireMe.status.en,
     statusBn: hireMe.status.bn,
@@ -29,7 +29,7 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
   const [composeName, setComposeName] = useState("")
   const [composeSubject, setComposeSubject] = useState("")
   const [composeMessage, setComposeMessage] = useState("")
-  const [composeTemplate, setComposeTemplate] = useState<EmailTemplateId>("thankyou")
+  const [composeTemplate, setComposeTemplate] = useState<string>("thankyou")
   const [composeSending, setComposeSending] = useState(false)
   const [composeSent, setComposeSent] = useState(false)
   const [composeError, setComposeError] = useState("")
@@ -71,7 +71,7 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
         recipientName: composeName || composeTo.split("@")[0],
         subject: composeSubject,
         message: composeMessage,
-        templateId: composeTemplate,
+        templateId: "custom", // uses dynamic HTML override directly
         config: emailConfig,
       })
       if (ok) {
@@ -99,10 +99,19 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
   const openReplyComposer = (email: string, name: string) => {
     setComposeTo(email)
     setComposeName(name)
-    setComposeSubject(`Re: Your message — ${name}`)
-    setComposeTemplate("followup")
     setReplyTo(email)
     setComposeOpen(true)
+    
+    const tpl = emailTemplates.find(t => t.id === "followup")
+    if (tpl) {
+      setComposeTemplate("followup")
+      setComposeSubject(tpl.subject.replace(/\{\{name\}\}/g, name))
+      setComposeMessage(tpl.bodyHtml || tpl.bodyText || "")
+    } else {
+      setComposeTemplate("custom")
+      setComposeSubject(`Re: Your message — ${name}`)
+      setComposeMessage("")
+    }
   }
 
   const inputClass = "w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/12 outline-none text-[#e8e9ef] text-[13.5px] focus:border-[#e7b84b]/40 transition"
@@ -227,15 +236,24 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
               <select
                 value={composeTemplate}
                 onChange={(e) => {
-                  const tplId = e.target.value as EmailTemplateId
+                  const tplId = e.target.value
                   setComposeTemplate(tplId)
-                  const tpl = EMAIL_TEMPLATES.find(t => t.id === tplId)
-                  if (tpl && tplId !== "custom") setComposeSubject(tpl.subject.replace(/\{\{name\}\}/g, composeName || ""))
+                  if (tplId === "custom") {
+                    setComposeSubject("")
+                    setComposeMessage("")
+                    return
+                  }
+                  const tpl = emailTemplates.find(t => t.id === tplId)
+                  if (tpl) {
+                    setComposeSubject(tpl.subject.replace(/\{\{name\}\}/g, composeName || ""))
+                    setComposeMessage(tpl.bodyHtml || tpl.bodyText || "")
+                  }
                 }}
                 className="w-full px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/12 outline-none text-[#e8e9ef] text-[13.5px] appearance-none cursor-pointer focus:border-[#e7b84b]/40 transition pr-9"
               >
-                {EMAIL_TEMPLATES.map(tpl => (
-                  <option key={tpl.id} value={tpl.id}>{lang === "bn" ? tpl.nameBn : tpl.name}</option>
+                <option value="custom">{t("Custom / Plain Text", "কাস্টম / সাধারণ টেক্সট", lang)}</option>
+                {emailTemplates.map(tpl => (
+                  <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                 ))}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9aa0ad] pointer-events-none" />

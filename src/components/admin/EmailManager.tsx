@@ -1118,14 +1118,16 @@ function EmailTemplates({ lang }: { lang: Lang }) {
     setHtmlBody(tpl.bodyHtml)
     setCategory(tpl.category || "Marketing")
     setEditorMode("edit")
-    setBuilderTab(tpl.bodyHtml.includes("unlayer") || !tpl.bodyHtml ? "visual" : "code")
+    const isVisual = tpl.designJson || tpl.bodyHtml.startsWith("{") || tpl.bodyHtml.includes("unlayer") || !tpl.bodyHtml
+    setBuilderTab(isVisual ? "visual" : "code")
   }
 
   // Load design template to visual builder when loaded
   const onVisualEditorLoad = () => {
-    if (editingTemplate?.bodyHtml && editingTemplate.bodyHtml.startsWith("{")) {
+    const designStr = editingTemplate?.designJson || (editingTemplate?.bodyHtml?.startsWith("{") ? editingTemplate.bodyHtml : null)
+    if (designStr) {
       try {
-        const jsonDesign = JSON.parse(editingTemplate.bodyHtml)
+        const jsonDesign = JSON.parse(designStr)
         emailEditorRef.current?.editor?.loadDesign(jsonDesign)
       } catch (err) {
         console.warn("Could not parse visual layout json:", err)
@@ -1149,7 +1151,8 @@ function EmailTemplates({ lang }: { lang: Lang }) {
           name,
           slug: name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
           subject,
-          bodyHtml: jsonDesignStr || htmlContent,
+          bodyHtml: htmlContent,
+          designJson: jsonDesignStr || undefined,
           bodyText: htmlContent.replace(/<[^>]*>/g, ""),
           variables: ["name", "email", "message"],
           category,
@@ -1165,7 +1168,8 @@ function EmailTemplates({ lang }: { lang: Lang }) {
                 ...t,
                 name,
                 subject,
-                bodyHtml: jsonDesignStr || htmlContent,
+                bodyHtml: htmlContent,
+                designJson: jsonDesignStr || undefined,
                 bodyText: htmlContent.replace(/<[^>]*>/g, ""),
                 category,
               }

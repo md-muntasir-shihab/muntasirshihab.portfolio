@@ -297,15 +297,6 @@ function TorusHero(){
       {/* Background Glow */}
       <div className="absolute inset-0 opacity-[0.9]" style={{background:"radial-gradient(560px 380px at 60% 40%, rgba(247,207,106,0.18), transparent 70%)"}}/>
       
-      {/* Torus SVGs - Background Layers */}
-      <svg viewBox="0 0 600 600" className="absolute inset-0 w-full h-full">
-        <defs><linearGradient id="gt" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#f7e0a5"/><stop offset="100%" stopColor="#c98f27"/></linearGradient></defs>
-        <g transform="translate(300,300)">
-          <ellipse rx="220" ry="88" fill="none" stroke="url(#gt)" strokeWidth="1.5" opacity=".35"><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="30s" repeatCount="indefinite"/></ellipse>
-          <ellipse rx="160" ry="240" fill="none" stroke="url(#gt)" strokeWidth="1" opacity=".25" transform="rotate(45)"><animateTransform attributeName="transform" type="rotate" values="45;405;45" dur="25s" repeatCount="indefinite"/></ellipse>
-        </g>
-      </svg>
-
       {/* Profile Photo Container */}
       <motion.div 
         initial={{ scale: 0.8, opacity: 0 }}
@@ -314,9 +305,6 @@ function TorusHero(){
         className="relative z-20"
       >
         <div className="relative w-56 h-56 md:w-64 md:h-64 rounded-full p-2">
-          {/* Outer rotating ring */}
-          <div className="absolute inset-0 rounded-full border-2 border-dashed border-yellow-500/30 animate-[border-rotate_15s_linear_infinite]" />
-          
           {/* Inner Glow/Photo Frame */}
           <div className="w-full h-full rounded-full overflow-hidden border-[3px] border-[#e7b84b] gold-glow relative bg-[#12121b]">
             {hasAvatar ? (
@@ -340,15 +328,6 @@ function TorusHero(){
           <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#e7b84b] rounded-full gold-glow animate-bounce" />
         </div>
       </motion.div>
-
-      {/* Foreground decorative ellipses */}
-      <svg viewBox="0 0 600 600" className="absolute inset-0 w-full h-full pointer-events-none">
-        <g transform="translate(300,300)">
-          <ellipse rx="180" ry="70" fill="none" stroke="url(#gt)" strokeWidth="2.5" opacity=".8">
-            <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="20s" repeatCount="indefinite"/>
-          </ellipse>
-        </g>
-      </svg>
     </div>
   )
 }

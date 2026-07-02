@@ -20,7 +20,7 @@ export interface Contact {
 }
 
 export interface EmailTemplate {
-  id: string; name: string; slug: string; subject: string; bodyHtml: string; bodyText: string; variables: string[]; category: string; isActive: boolean; isDefault: boolean;
+  id: string; name: string; slug: string; subject: string; bodyHtml: string; bodyText: string; variables: string[]; category: string; isActive: boolean; isDefault: boolean; designJson?: string;
 }
 
 export interface EmailLog {
