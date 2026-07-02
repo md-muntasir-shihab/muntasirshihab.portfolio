@@ -234,7 +234,11 @@ export function Footer({ lang }:{lang:Lang}){
             {/* Brand */}
             <div>
               <Link to="/" className="flex items-center gap-3 mb-4">
-                <div className={`w-11 h-11 rounded-[13px] flex items-center justify-center text-[14px] font-[700] font-mono ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"gold-ring bg-[#14141f] gold-text"}`}>MS</div>
+                {profile.customLogo ? (
+                  <img src={profile.customLogo} alt="Logo" className="h-11 max-w-[130px] object-contain rounded-md" />
+                ) : (
+                  <div className={`w-11 h-11 rounded-[13px] flex items-center justify-center text-[14px] font-[700] font-mono ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"gold-ring bg-[#14141f] gold-text"}`}>MS</div>
+                )}
                 <div className="leading-tight">
                   <div className={`text-[16px] font-[700] tracking-[-0.01em] ${lt?"text-[#1a1a1f]":"text-white"}`}>{profile.name[lang]}</div>
                   <div className={`text-[11.5px] mt-[2px] ${lt?"text-[#8a7a5c]":"text-[#9aa0ad]"}`}>{t("Statistics Student & Designer","পরিসংখ্যান শিক্ষার্থী ও ডিজাইনার",lang)}</div>

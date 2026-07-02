@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation, Link, useParams, Navigate } from "react-router-dom"
 import { useEffect, useState, useMemo, useContext, useRef } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, StatTicker, ThemeProvider, ThemeCtx, Navbar, Footer, ScrollProgress, BackToTop } from "./components/ui-kit"
 import { profile, experience, skills, projects, blogPosts, testimonials, services, education, achievements, type Lang, ADMIN_SLUG } from "./lib/data"
 import { StoreProvider, useStore, sanitize, adminSecurity } from "./lib/store"
@@ -31,7 +31,8 @@ import { trackVisitor, sendDuration, trackCvDownload, getGeo } from "./lib/analy
 import confetti from "canvas-confetti"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
-  ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu, Bell, ChevronRight, ChevronDown, AlertTriangle
+  ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu, Bell, ChevronRight, ChevronDown, AlertTriangle,
+  X, ChevronLeft, Globe
 } from "lucide-react"
 
 // Social brand icons (inline SVG - brand-colored)
@@ -133,20 +134,314 @@ function MainContent({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
   )
 }
 
+function ImageCarousel({ images }: { images: string[] }) {
+  const [active, setActive] = useState(0)
+  if (images.length === 0) {
+    return (
+      <div className="w-full aspect-[16/10] rounded-xl border border-dashed border-white/20 bg-black/20 flex flex-col items-center justify-center text-[#7e8391]">
+        <span className="text-[11px] font-mono">NO IMAGE AVAILABLE</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 w-full">
+      <div className="relative aspect-[16/10] w-full rounded-xl overflow-hidden border border-white/10 bg-black/40 group">
+        <img
+          src={images[active]}
+          alt={`Slide ${active}`}
+          className="w-full h-full object-cover transition duration-300"
+        />
+        
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={() => setActive((active - 1 + images.length) % images.length)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={() => setActive((active + 1) % images.length)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+            >
+              <ChevronRight size={18} />
+            </button>
+            <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-10">
+              {images.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActive(idx)}
+                  className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
+                    active === idx ? "bg-[#e7b84b] w-3" : "bg-white/40 hover:bg-white/60"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {images.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto py-1 scrollbar-none">
+          {images.map((img, idx) => (
+            <button
+              key={idx}
+              onClick={() => setActive(idx)}
+              className={`relative w-16 sm:w-20 aspect-[16/10] rounded-lg overflow-hidden border transition shrink-0 cursor-pointer ${
+                active === idx ? "border-[#e7b84b] scale-[1.03] shadow-md shadow-[#e7b84b]/10" : "border-white/10 opacity-60 hover:opacity-100"
+              }`}
+            >
+              <img src={img} alt={`Thumbnail ${idx}`} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProjectModal({ project, onClose, lang }: { project: any; onClose: () => void; lang: Lang }) {
+  const { theme } = useContext(ThemeCtx)
+  const lt = theme === "light"
+  const allImages = [project.img, ...(project.images || [])].filter(Boolean)
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = "unset" }
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-10">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+      />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: "spring", duration: 0.5 }}
+        className={`relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[24px] p-5 sm:p-7 md:p-9 shadow-2xl z-10 ${
+          lt ? "bg-[#fbf9f3] border border-[#dbc897] text-[#3a3730]" : "bg-[#0d0e15] border border-white/[0.08] text-[#e8e9ef]"
+        }`}
+      >
+        <button
+          onClick={onClose}
+          className={`absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center border transition cursor-pointer z-20 ${
+            lt ? "border-[#dbc897] hover:bg-[#dbc897]/20 text-[#8a8278]" : "border-white/10 hover:bg-white/10 text-[#aeb3c2]"
+          }`}
+          title={t("Close", "বন্ধ করুন", lang)}
+        >
+          <X size={18} />
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8 mt-4">
+          <div className="md:col-span-7 flex flex-col gap-4">
+            <ImageCarousel images={allImages} />
+          </div>
+
+          <div className="md:col-span-5 flex flex-col justify-between h-full space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className={`text-[12px] font-mono px-2.5 py-[5px] rounded-full ${
+                  lt ? "bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]" : "bg-white/[0.045] border border-white/[0.07] text-[#e7b84b]"
+                }`}>
+                  {project.year}
+                </span>
+                <span className={`text-[12px] font-mono ${lt ? "text-[#8a8278]" : "text-[#7e8391]"}`}>
+                  {project.featured ? t("Featured Project", "ফিচারড প্রজেক্ট", lang) : ""}
+                </span>
+              </div>
+
+              <h2 className="text-[22px] sm:text-[26px] font-[750] tracking-[-0.015em] leading-tight">
+                {project.title[lang]}
+              </h2>
+
+              <p className={`text-[14.5px] leading-relaxed font-[550] ${lt ? "text-[#5a5449]" : "text-[#d2d5df]"}`}>
+                {project.blurb[lang]}
+              </p>
+
+              {project.desc && (
+                <div className={`text-[14px] leading-relaxed pt-2 border-t whitespace-pre-wrap ${
+                  lt ? "border-[#dbc897]/30 text-[#6a6356]" : "border-white/[0.06] text-[#a6acbb]"
+                }`}>
+                  {project.desc[lang]}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5 pt-2">
+                {project.tags.map((tg: string) => (
+                  <span
+                    key={tg}
+                    className={`text-[11px] px-2.5 py-[4px] rounded-full font-mono ${
+                      lt ? "bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]" : "bg-white/[0.045] border border-white/[0.08] text-[#c8b27a]"
+                    }`}
+                  >
+                    {tg}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-white/[0.06] sm:flex-nowrap">
+              {project.link && (
+                <a
+                  href={project.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[120px] px-4 h-10 rounded-xl bg-[#e7b84b] hover:bg-[#dbc897] text-black font-[650] text-[13.5px] flex items-center justify-center gap-1.5 transition shadow-lg shadow-[#e7b84b]/10 cursor-pointer"
+                >
+                  <Globe size={15} />
+                  {t("Live Demo", "লাইভ ডেমো", lang)}
+                </a>
+              )}
+              {project.github && (
+                <a
+                  href={project.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex-1 min-w-[120px] px-4 h-10 rounded-xl border font-[650] text-[13.5px] flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    lt ? "border-[#dbc897] hover:bg-[#f0e6cf] text-[#8a6b2b]" : "border-white/[0.12] hover:bg-white/[0.05] text-[#e8e9ef]"
+                  }`}
+                >
+                  <SocialIcon name="GitHub" size={15} />
+                  {t("Source Code", "সোর্স কোড", lang)}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function BlogModal({ post, onClose, lang }: { post: any; onClose: () => void; lang: Lang }) {
+  const { theme } = useContext(ThemeCtx)
+  const lt = theme === "light"
+  const allImages = [post.image, ...(post.images || [])].filter(Boolean)
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = "unset" }
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 md:p-10">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+      />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: "spring", duration: 0.5 }}
+        className={`relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[24px] p-5 sm:p-7 md:p-9 shadow-2xl z-10 ${
+          lt ? "bg-[#fbf9f3] border border-[#dbc897] text-[#3a3730]" : "bg-[#0d0e15] border border-white/[0.08] text-[#e8e9ef]"
+        }`}
+      >
+        <button
+          onClick={onClose}
+          className={`absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center border transition cursor-pointer z-20 ${
+            lt ? "border-[#dbc897] hover:bg-[#dbc897]/20 text-[#8a8278]" : "border-white/10 hover:bg-white/10 text-[#aeb3c2]"
+          }`}
+          title={t("Close", "বন্ধ করুন", lang)}
+        >
+          <X size={18} />
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8 mt-4">
+          <div className="md:col-span-7 flex flex-col gap-4">
+            <ImageCarousel images={allImages} />
+          </div>
+
+          <div className="md:col-span-5 flex flex-col justify-between h-full space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className={`text-[12px] font-mono px-2.5 py-[5px] rounded-full ${
+                  lt ? "bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]" : "bg-white/[0.045] border border-white/[0.07] text-[#e7b84b]"
+                }`}>
+                  {post.date}
+                </span>
+                <span className={`text-[12px] font-mono ${lt ? "text-[#8a8278]" : "text-[#7e8391]"}`}>
+                  {post.read}
+                </span>
+              </div>
+
+              <h2 className="text-[22px] sm:text-[26px] font-[750] tracking-[-0.015em] leading-tight">
+                {post.title[lang]}
+              </h2>
+
+              <p className={`text-[14.5px] leading-relaxed font-[550] ${lt ? "text-[#5a5449]" : "text-[#d2d5df]"}`}>
+                {post.excerpt[lang]}
+              </p>
+
+              {post.content && (
+                <div className={`text-[14px] leading-relaxed pt-2 border-t whitespace-pre-wrap max-h-[300px] overflow-y-auto pr-2 ${
+                  lt ? "border-[#dbc897]/30 text-[#6a6356]" : "border-white/[0.06] text-[#a6acbb]"
+                }`}>
+                  {post.content[lang]}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5 pt-2">
+                {post.tags.map((tg: string) => (
+                  <span
+                    key={tg}
+                    className={`text-[11px] px-2.5 py-[4px] rounded-full font-mono ${
+                      lt ? "bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]" : "bg-white/[0.045] border border-white/[0.08] text-[#c8b27a]"
+                    }`}
+                  >
+                    {tg}
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            <div className="pt-4 border-t border-white/[0.06] text-right">
+              <Link
+                to={`/blog/${post.slug}`}
+                onClick={onClose}
+                className="inline-flex px-5 h-10 rounded-xl bg-[#e7b84b] hover:bg-[#dbc897] text-black font-[650] text-[13.5px] items-center justify-center gap-1.5 transition shadow-lg shadow-[#e7b84b]/10 cursor-pointer"
+              >
+                {t("Read Full Post", "পুরো পোস্ট পড়ুন", lang)}
+                <ArrowUpRight size={15} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
   const location = useLocation()
+  const [selectedProject, setSelectedProject] = useState<any | null>(null)
+  const [selectedBlog, setSelectedBlog] = useState<any | null>(null)
+
   return (
     <div className="relative min-h-screen">
       <Navbar lang={lang} setLang={setLang} />
       
       <PageTransition>
         <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<HomePage lang={lang} setLang={setLang} />} />
+          <Route path="/" element={<HomePage lang={lang} setLang={setLang} onSelectProject={setSelectedProject} />} />
           <Route path="/about" element={<AboutPage lang={lang} setLang={setLang} />} />
           <Route path="/experience" element={<ExperiencePage lang={lang} setLang={setLang} />} />
           <Route path="/skills" element={<SkillsPage lang={lang} setLang={setLang} />} />
-          <Route path="/projects" element={<ProjectsPage lang={lang} setLang={setLang} />} />
-          <Route path="/blog" element={<BlogPage lang={lang} setLang={setLang} />} />
+          <Route path="/projects" element={<ProjectsPage lang={lang} setLang={setLang} onSelectProject={setSelectedProject} />} />
+          <Route path="/blog" element={<BlogPage lang={lang} setLang={setLang} onSelectBlog={setSelectedBlog} />} />
           <Route path="/blog/:slug" element={<BlogDetail lang={lang} setLang={setLang} />} />
           <Route path="/testimonials" element={<TestimonialsPage lang={lang} setLang={setLang} />} />
           <Route path="/recommendations" element={<RecommendationsPage lang={lang} setLang={setLang} />} />
@@ -160,12 +455,21 @@ function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
       <Footer lang={lang} />
       <ScrollProgress />
       <BackToTop />
+
+      <AnimatePresence>
+        {selectedProject && (
+          <ProjectModal project={selectedProject} onClose={() => setSelectedProject(null)} lang={lang} />
+        )}
+        {selectedBlog && (
+          <BlogModal post={selectedBlog} onClose={() => setSelectedBlog(null)} lang={lang} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
 // ================== HOME ==================
-function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
+function HomePage({ lang, setLang, onSelectProject }:{lang:Lang,setLang:(l:Lang)=>void,onSelectProject:(p:any)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
   const { profile, hireMe, projects, tools, testimonials, visibility, pageBackgroundMap: bgMap } = useStore()
   return (
@@ -236,14 +540,16 @@ function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
             <SectionHeading kicker={t("Selected work","নির্বাচিত কাজ",lang)} title={t("Featured Projects","ফিচারড প্রজেক্ট",lang)} right={<Link to="/projects" className={`text-[13px] flex items-center gap-1 ${lt?"text-[#a0782e]":"text-[#d5b56a]"}`}>{t("View all","সবগুলো দেখুন",lang)} <ArrowUpRight size={15}/></Link>} />
             <div className="grid md:grid-cols-3 gap-5">
               {projects.filter(p=>p.featured).map(pr=>(
-                <MagicCard key={pr.id}>
-                  <div className={`text-[11px] font-mono ${lt?"text-[#a0782e]":"text-[#d1b16a]"}`}>{pr.year}</div>
-                  <div className={`text-[18px] font-[660] mt-2 tracking-[-0.012em] ${lt?"text-[#1a1a1f]":""}`}>{pr.title[lang]}</div>
-                  <div className={`text-[13.6px] mt-2 leading-relaxed ${lt?"text-[#7a7366]":"text-[#a6acbb]"}`}>{pr.blurb[lang]}</div>
-                  <div className="flex flex-wrap gap-[8px] mt-4 text-[11px]">
-                    {pr.tags.map(tg=><span key={tg} className={`px-[10px] py-[5px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.07] text-[#c8b27a]"}`}>{tg}</span>)}
-                  </div>
-                </MagicCard>
+                <div key={pr.id} className="cursor-pointer" onClick={() => onSelectProject(pr)}>
+                  <MagicCard>
+                    <div className={`text-[11px] font-mono ${lt?"text-[#a0782e]":"text-[#d1b16a]"}`}>{pr.year}</div>
+                    <div className={`text-[18px] font-[660] mt-2 tracking-[-0.012em] ${lt?"text-[#1a1a1f]":""}`}>{pr.title[lang]}</div>
+                    <div className={`text-[13.6px] mt-2 leading-relaxed ${lt?"text-[#7a7366]":"text-[#a6acbb]"}`}>{pr.blurb[lang]}</div>
+                    <div className="flex flex-wrap gap-[8px] mt-4 text-[11px]">
+                      {pr.tags.map(tg=><span key={tg} className={`px-[10px] py-[5px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.07] text-[#c8b27a]"}`}>{tg}</span>)}
+                    </div>
+                  </MagicCard>
+                </div>
               ))}
             </div>
           </section>
@@ -313,6 +619,14 @@ function TorusHero(){
                 alt={profile.name.en} 
                 className="w-full h-full object-cover grayscale-[20%] hover:grayscale-0 transition-all duration-500 scale-105 hover:scale-110"
               />
+            ) : profile.customLogo ? (
+              <div className="w-full h-full flex items-center justify-center bg-[#12121b] p-6">
+                <img 
+                  src={profile.customLogo} 
+                  alt="Custom Logo" 
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#1a1a2e] to-[#0f0f16]">
                 <span className="text-5xl font-bold gold-text opacity-40">MS</span>
@@ -457,7 +771,7 @@ function SkillsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 }
 
 // ============ PROJECTS + GITHUB (merged) ============
-function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
+function ProjectsPage({lang,setLang,onSelectProject}:{lang:Lang,setLang:(l:Lang)=>void,onSelectProject:(p:any)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
   const { projects, pageBackgroundMap: bgMap } = useStore()
   const [tab, setTab] = useState<"projects"|"github">("projects")
@@ -471,17 +785,19 @@ function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
         {tab==="projects" && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {projects.map(pr=>(
-              <MagicCard key={pr.id} className="group">
-                <div className={`aspect-[16/9.7] rounded-[14px] relative overflow-hidden ${lt?"bg-[#f0e6cf] border border-[#e5e0d4]":"bg-[#10111a] border border-white/[0.07]"}`}>
-                  {pr.img && <img src={pr.img} alt={pr.title[lang]} className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105" />}
-                  <div className="absolute inset-0 opacity-[.28]" style={{background:"linear-gradient(125deg, rgba(231,184,75,.22), transparent 55%)"}}/>
-                  <div className={`absolute top-3 left-3 text-[11px] font-mono px-2 py-[4px] rounded-full ${lt?"bg-white/60 border border-[#dbc897] text-[#8a6b2b]":"bg-black/40 border border-white/[0.10] text-[#e8cd8a]"}`}>{pr.year}</div>
-                  <div className="absolute bottom-3 right-3"><ArrowUpRight size={17} className="text-[#e7c77a] opacity-80 group-hover:translate-x-[2px] group-hover:-translate-y-[2px] transition-transform"/></div>
-                </div>
-                <div className="mt-[14px] text-[17px] font-[650] tracking-[-0.011em]">{pr.title[lang]}</div>
-                <div className={`text-[13.5px] mt-[6px] leading-relaxed ${lt?"text-[#7a7366]":"text-[#aeb3c0]"}`}>{pr.blurb[lang]}</div>
-                <div className="flex flex-wrap gap-[7px] mt-[12px]">{pr.tags.map(tag=><span key={tag} className={`text-[11px] px-[9px] py-[4px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.076] text-[#d0b67f]"}`}>{tag}</span>)}</div>
-              </MagicCard>
+              <div key={pr.id} className="cursor-pointer" onClick={() => onSelectProject(pr)}>
+                <MagicCard className="group h-full">
+                  <div className={`aspect-[16/9.7] rounded-[14px] relative overflow-hidden ${lt?"bg-[#f0e6cf] border border-[#e5e0d4]":"bg-[#10111a] border border-white/[0.07]"}`}>
+                    {pr.img && <img src={pr.img} alt={pr.title[lang]} className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105" />}
+                    <div className="absolute inset-0 opacity-[.28]" style={{background:"linear-gradient(125deg, rgba(231,184,75,.22), transparent 55%)"}}/>
+                    <div className={`absolute top-3 left-3 text-[11px] font-mono px-2 py-[4px] rounded-full ${lt?"bg-white/60 border border-[#dbc897] text-[#8a6b2b]":"bg-black/40 border border-white/[0.10] text-[#e8cd8a]"}`}>{pr.year}</div>
+                    <div className="absolute bottom-3 right-3"><ArrowUpRight size={17} className="text-[#e7c77a] opacity-80 group-hover:translate-x-[2px] group-hover:-translate-y-[2px] transition-transform"/></div>
+                  </div>
+                  <div className="mt-[14px] text-[17px] font-[650] tracking-[-0.011em]">{pr.title[lang]}</div>
+                  <div className={`text-[13.5px] mt-[6px] leading-relaxed ${lt?"text-[#7a7366]":"text-[#aeb3c0]"}`}>{pr.blurb[lang]}</div>
+                  <div className="flex flex-wrap gap-[7px] mt-[12px]">{pr.tags.map(tag=><span key={tag} className={`text-[11px] px-[9px] py-[4px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.076] text-[#d0b67f]"}`}>{tag}</span>)}</div>
+                </MagicCard>
+              </div>
             ))}
           </div>
         )}
@@ -494,13 +810,13 @@ function ProjectsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 }
 
 // ============ BLOG ============
-function BlogPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
+function BlogPage({lang,setLang,onSelectBlog}:{lang:Lang,setLang:(l:Lang)=>void,onSelectBlog:(b:any)=>void}){
   const { blogPosts, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/blog"]} lang={lang} setLang={setLang} title={t("Blog","ব্লগ",lang)} subtitle={t("Articles & Notes","লেখালেখি ও নোটস",lang)}>
       <div className="max-w-5xl mx-auto px-5 md:px-8 mt-8 grid md:grid-cols-3 gap-5">
         {blogPosts.map(post=>(
-          <Link key={post.slug} to={`/blog/${post.slug}`}>
+          <div key={post.slug} className="cursor-pointer" onClick={() => onSelectBlog(post)}>
             <MagicCard className="h-full">
               {post.image && (
                 <div className="aspect-[16/10] w-full overflow-hidden rounded-[12px] border border-white/[0.08] mb-3 bg-black/20">
@@ -514,7 +830,7 @@ function BlogPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                 {post.tags.map(tg=><span key={tg} className="text-[10px] px-2.5 py-[3px] rounded-full bg-white/[0.05] border border-white/[0.08] text-[#d8bc7d]">{tg}</span>)}
               </div>
             </MagicCard>
-          </Link>
+          </div>
         ))}
       </div>
     </PageShell>

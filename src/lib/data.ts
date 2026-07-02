@@ -14,6 +14,7 @@ export interface Project {
   link?: string
   github?: string
   featured: boolean
+  images?: string[]
 }
 
 export interface BlogPost {
@@ -25,6 +26,7 @@ export interface BlogPost {
   read: string
   tags: string[]
   image?: string
+  images?: string[]
 }
 
 export interface Recommendation {
@@ -45,6 +47,7 @@ export const profile = {
   firstName: "MD MUNTASIR",
   lastName: "SHIHAB",
   avatar: "", // Paste Image URL from Admin to show profile photo
+  customLogo: "", // Unified logo synced globally
   title: { 
     en: "Student • Graphic Designer • Creative Learner",
     bn: "শিক্ষার্থী • গ্রাফিক ডিজাইনার • সৃজনশীল শিক্ষার্থী"

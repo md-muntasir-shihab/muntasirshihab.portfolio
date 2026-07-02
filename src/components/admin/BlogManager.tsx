@@ -15,6 +15,7 @@ interface BlogPost {
   content?: { en: string; bn: string }
   tags: string[]
   image?: string
+  images?: string[]
 }
 
 export default function BlogManager({ lang }: { lang: Lang }) {
@@ -30,10 +31,13 @@ export default function BlogManager({ lang }: { lang: Lang }) {
     content: { en: "", bn: "" },
     tags: [],
     image: "",
+    images: [],
   })
 
   const [newTag, setNewTag] = useState("")
   const [uploadingImageState, setUploadingImageState] = useState(false)
+  const [uploadingGallery, setUploadingGallery] = useState(false)
+  const [galleryUrlInput, setGalleryUrlInput] = useState("")
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -49,6 +53,37 @@ export default function BlogManager({ lang }: { lang: Lang }) {
     }
   }
 
+  const handleUploadGalleryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingGallery(true)
+    try {
+      const result = await uploadImage(file, "blog")
+      const currentGallery = currentItem.images || []
+      setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, result.url] }))
+    } catch (err: any) {
+      alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
+    } finally {
+      setUploadingGallery(false)
+    }
+  }
+
+  const addGalleryUrl = () => {
+    const url = galleryUrlInput.trim()
+    if (!url) return
+    const currentGallery = currentItem.images || []
+    setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, url] }))
+    setGalleryUrlInput("")
+  }
+
+  const removeGalleryImage = (index: number) => {
+    const currentGallery = currentItem.images || []
+    setCurrentItem((prev) => ({
+      ...prev,
+      images: currentGallery.filter((_, i) => i !== index)
+    }))
+  }
+
   const handleStartEdit = (index: number) => {
     setEditingIdx(index)
     setIsNew(false)
@@ -62,6 +97,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
       content: base.content ? { ...base.content } : { en: "", bn: "" },
       tags: base.tags ? [...base.tags] : [],
       image: base.image || "",
+      images: base.images || [],
     })
   }
 
@@ -77,6 +113,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
       content: { en: "", bn: "" },
       tags: [],
       image: "",
+      images: [],
     })
   }
 
@@ -188,7 +225,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
               />
             </div>
 
-            {/* Blog Cover Image */}
+            {/* Blog Post Cover Image */}
             <div className="md:col-span-2 space-y-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Blog Post Cover Image", "ব্লগ পোস্ট কভার ছবি", lang)}</label>
               <div className="flex flex-col sm:flex-row gap-4 items-center p-4 rounded-[14px] bg-black/20 border border-white/[0.08]">
@@ -219,6 +256,50 @@ export default function BlogManager({ lang }: { lang: Lang }) {
                   <p className="text-[11px] text-[#7e8391]">{t("Landscape banner format recommended (max 3MB)", "ল্যান্ডস্কেপ ব্যানার ফরম্যাট সাজেস্টেড (সর্বোচ্চ ৩MB)", lang)}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Blog Gallery */}
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Blog Post Gallery / Additional Images", "ব্লগ গ্যালারি / অতিরিক্ত ছবিসমূহ", lang)}</label>
+              <div className="flex gap-2">
+                <input
+                  title={t("Image URL", "ছবি URL", lang)}
+                  placeholder={t("Paste image URL here...", "এখানে ছবি URL পেস্ট করুন...", lang)}
+                  value={galleryUrlInput}
+                  onChange={(e) => setGalleryUrlInput(e.target.value)}
+                  className="flex-1 px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
+                />
+                <button
+                  type="button"
+                  onClick={addGalleryUrl}
+                  className="px-4 h-[40px] rounded-[9px] bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-[#e8e9ef] font-[600] text-[13px] cursor-pointer"
+                >
+                  {t("Add URL", "URL যোগ করুন", lang)}
+                </button>
+                <label className="px-4 h-[40px] rounded-[9px] bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] flex items-center justify-center gap-2 cursor-pointer transition text-[13.5px] font-[600]">
+                  {uploadingGallery ? <Loader size={15} className="animate-spin" /> : <Upload size={15} />}
+                  {t("Upload", "আপলোড", lang)}
+                  <input type="file" accept="image/*" onChange={handleUploadGalleryImage} className="hidden" />
+                </label>
+              </div>
+
+              {currentItem.images && currentItem.images.length > 0 && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-3">
+                  {currentItem.images.map((imgUrl, gIdx) => (
+                    <div key={gIdx} className="relative group aspect-[4/3] rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                      <img src={imgUrl} alt={`Gallery ${gIdx}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(gIdx)}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 transition"
+                        title={t("Remove Image", "ছবি সরান", lang)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
