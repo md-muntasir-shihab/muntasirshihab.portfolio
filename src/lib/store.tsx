@@ -6,15 +6,37 @@ import {
   tools as defTools, hireMe as defHireMe, education as defEdu, achievements as defAchieve,
   pageBackgroundMap as defBgMap
 } from "./data"
-import { supabase, supabaseAdmin } from "./supabase"
+import { supabase } from "./supabase"
+import { EMAIL_TEMPLATES } from "./email"
+import type { BGType } from "../components/backgrounds"
 
 // ---------- Types ----------
 export interface ContactMessage {
-  id: string; name: string; email: string; phone: string; message: string; date: string; read: boolean
+  id: string; contactId?: string; subject?: string; name: string; email: string; phone: string; message: string; date: string; read: boolean; replied?: boolean;
+}
+
+export interface Contact {
+  id: string; name: string; email: string; phone: string; company: string; source: string; tags: string[]; notes: string; isStarred: boolean; lastContact: string;
+}
+
+export interface EmailTemplate {
+  id: string; name: string; slug: string; subject: string; bodyHtml: string; bodyText: string; variables: string[]; category: string; isActive: boolean; isDefault: boolean;
+}
+
+export interface EmailLog {
+  id: string; templateId?: string; contactId?: string; toEmail: string; subject: string; status: string; sentAt: string; type: string;
+}
+
+export interface FollowUp {
+  id: string; contactId: string; subject: string; bodyHtml: string; scheduledAt: string; status: string; note: string;
+}
+
+export interface EmailSettings {
+  resendApiKey: string; fromName: string; fromEmail: string; replyTo: string; adminEmail: string; sendAutoReply: boolean; sendAdminNotify: boolean; sendCvNotify: boolean; sendVisitorNotify: boolean; footerText: string; signatureHtml: string;
 }
 
 interface StoreShape {
-  profile: typeof defProfile & { customLogo?: string }
+  profile: typeof defProfile & { customLogo?: string; favicon?: string }
   experience: typeof defExp
   skills: typeof defSkills
   projects: typeof defProjects
@@ -27,10 +49,17 @@ interface StoreShape {
   education: typeof defEdu
   achievements: typeof defAchieve
   visibility: typeof defVis
-  pageBackgroundMap: typeof defBgMap
+  pageBackgroundMap: Record<string, BGType>
   messages: ContactMessage[]
+  contacts: Contact[]
+  emailTemplates: EmailTemplate[]
+  emailLogs: EmailLog[]
+  followUps: FollowUp[]
+  emailSettings: EmailSettings
   cvCount: number
+  admin_2fa: { enabled: boolean; encryptedSecret: string }
 }
+
 
 interface StoreCtxType extends StoreShape {
   loading: boolean
@@ -39,7 +68,7 @@ interface StoreCtxType extends StoreShape {
   markRead: (id: string) => Promise<void>
   deleteMessage: (id: string) => Promise<void>
   incCv: () => Promise<number>
-  updateProfile: (patch: Partial<typeof defProfile & { customLogo?: string }>) => Promise<void>
+  updateProfile: (patch: Partial<typeof defProfile & { customLogo?: string; favicon?: string }>) => Promise<void>
   updateExperience: (val: typeof defExp) => Promise<void>
   updateEducation: (val: typeof defEdu) => Promise<void>
   updateSkills: (val: typeof defSkills) => Promise<void>
@@ -51,31 +80,53 @@ interface StoreCtxType extends StoreShape {
   updateTools: (val: typeof defTools) => Promise<void>
   updateHireMe: (val: typeof defHireMe) => Promise<void>
   updateAchievements: (val: typeof defAchieve) => Promise<void>
-  updatePageBackgroundMap: (val: typeof defBgMap) => Promise<void>
+  updatePageBackgroundMap: (val: Record<string, BGType>) => Promise<void>
+  updateAdmin2FA: (val: { enabled: boolean; encryptedSecret: string }) => Promise<void>
+  
+  // Email CRM updates
+  updateContacts: (val: Contact[]) => Promise<void>
+  updateEmailTemplates: (val: EmailTemplate[]) => Promise<void>
+  updateEmailLogs: (val: EmailLog[]) => Promise<void>
+  updateFollowUps: (val: FollowUp[]) => Promise<void>
+  updateEmailSettings: (val: EmailSettings) => Promise<void>
+  updateMessages: (msgs: ContactMessage[]) => void
+
   resetAll: () => Promise<void>
 }
 
-// Global helper to save to Supabase portfolio_content table using RPC or direct upsert
+
+// Global helper to save to Supabase portfolio_content table using security definer RPC
+// Uses anon client — the RPC runs with definer privileges so it bypasses RLS
 async function saveToDb(key: string, value: any) {
-  if (!supabaseAdmin) {
-    console.warn(`[Store] supabaseAdmin not initialized. Cannot save key "${key}".`);
-    return;
-  }
   try {
-    const { error } = await supabaseAdmin.rpc('upsert_portfolio_content', {
+    const { error } = await supabase.rpc('upsert_portfolio_content', {
       p_key: key,
       p_value: value
     });
     if (error) {
-      // Fallback if RPC is missing/failed
-      const { error: upsertErr } = await supabaseAdmin
-        .from('portfolio_content')
-        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-      if (upsertErr) throw upsertErr;
+      console.error(`[Store] Failed to save key "${key}" to DB:`, error);
+    } else {
+      console.log(`[Store] Saved key "${key}" to DB`);
     }
   } catch (err) {
     console.error(`[Store] Failed to save key "${key}" to DB:`, err);
   }
+}
+
+
+function getDefaultTemplates() {
+  return EMAIL_TEMPLATES.map(tpl => ({
+    id: tpl.id,
+    name: tpl.name,
+    slug: tpl.id,
+    subject: tpl.subject,
+    bodyHtml: tpl.body,
+    bodyText: tpl.body.replace(/<[^>]*>/g, ""),
+    variables: ["name", "email", "message", "phone", "date"],
+    category: tpl.id === "auto_reply" || tpl.id === "admin_notify" ? "System" : "Marketing",
+    isActive: true,
+    isDefault: true
+  }))
 }
 
 const StoreCtx = createContext<StoreCtxType | null>(null)
@@ -96,10 +147,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     education: defEdu,
     achievements: defAchieve,
     visibility: defVis,
-    pageBackgroundMap: defBgMap,
+    pageBackgroundMap: defBgMap as Record<string, BGType>,
     messages: [],
+    contacts: [],
+    emailTemplates: getDefaultTemplates(),
+    emailLogs: [],
+    followUps: [],
+    emailSettings: { resendApiKey: "", fromName: "", fromEmail: "", replyTo: "", adminEmail: "", sendAutoReply: true, sendAdminNotify: true, sendCvNotify: true, sendVisitorNotify: false, footerText: "", signatureHtml: "" },
     cvCount: 0,
+    admin_2fa: { enabled: false, encryptedSecret: "" },
   }))
+
 
   useEffect(() => {
     async function loadData() {
@@ -113,12 +171,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             dbState[row.key as keyof StoreShape] = row.value
           })
         }
-
-        // Fetch messages
-        const { data: dbMessages, error: msgError } = await supabase
-          .from("messages")
-          .select("*")
-          .order("created_at", { ascending: false })
 
         // Fetch cv downloads
         const { count: cvDownloadsCount, error: cvError } = await supabase
@@ -141,19 +193,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           achievements: dbState.achievements || s.achievements,
           visibility: dbState.visibility ? { ...s.visibility, ...dbState.visibility } : s.visibility,
           pageBackgroundMap: dbState.pageBackgroundMap ? { ...s.pageBackgroundMap, ...dbState.pageBackgroundMap } : s.pageBackgroundMap,
-          messages: dbMessages
-            ? dbMessages.map((m: any) => ({
-                id: m.id,
-                name: m.name,
-                email: m.email,
-                phone: m.phone || "",
-                message: m.message,
-                date: m.created_at || m.date,
-                read: m.is_read || false,
-              }))
-            : [],
+          messages: dbState.messages || [],
+          contacts: dbState.contacts || [],
+          emailTemplates: (dbState.emailTemplates && dbState.emailTemplates.length > 0) ? dbState.emailTemplates : getDefaultTemplates(),
+          emailLogs: dbState.emailLogs || [],
+          followUps: dbState.followUps || [],
+          emailSettings: dbState.emailSettings || { resendApiKey: "", fromName: "", fromEmail: "", replyTo: "", adminEmail: "", sendAutoReply: true, sendAdminNotify: true, sendCvNotify: true, sendVisitorNotify: false, footerText: "", signatureHtml: "" },
           cvCount: cvDownloadsCount !== null && !cvError ? cvDownloadsCount : 0,
+          admin_2fa: dbState.admin_2fa || { enabled: false, encryptedSecret: "" },
         }))
+
       } catch (err) {
         console.warn("[Store] Failed to load data from Supabase, using defaults:", err)
       } finally {
@@ -164,12 +213,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setVisibility = useCallback(async (k: keyof typeof defVis, v: boolean) => {
-    setState(s => {
-      const nextVis = { ...s.visibility, [k]: v };
-      saveToDb("visibility", nextVis);
-      return { ...s, visibility: nextVis };
-    });
-  }, [])
+    const nextVis = { ...state.visibility, [k]: v };
+    await saveToDb("visibility", nextVis);
+    setState(s => ({ ...s, visibility: nextVis }));
+  }, [state.visibility])
 
   const addMessage = useCallback(async (m: Omit<ContactMessage, "id" | "date" | "read">) => {
     const msg: ContactMessage = {
@@ -182,17 +229,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const markRead = useCallback(async (id: string) => {
-    setState(s => ({ ...s, messages: s.messages.map(m => m.id === id ? { ...m, read: true } : m) }))
-    if (supabaseAdmin) {
-      await supabaseAdmin.from('messages').update({ is_read: true }).eq('id', id)
-    }
+    setState(s => {
+      const newMessages = s.messages.map(m => m.id === id ? { ...m, read: true } : m)
+      saveToDb('messages', newMessages)
+      return { ...s, messages: newMessages }
+    })
   }, [])
 
   const deleteMessage = useCallback(async (id: string) => {
-    setState(s => ({ ...s, messages: s.messages.filter(m => m.id !== id) }))
-    if (supabaseAdmin) {
-      await supabaseAdmin.from('messages').delete().eq('id', id)
-    }
+    setState(s => {
+      const newMessages = s.messages.filter(m => m.id !== id)
+      saveToDb('messages', newMessages)
+      return { ...s, messages: newMessages }
+    })
   }, [])
 
   const incCv = useCallback(async () => {
@@ -208,101 +257,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return next
   }, [state.cvCount])
 
-  const updateProfile = useCallback(async (patch: Partial<typeof defProfile & { customLogo?: string }>) => {
-    setState(s => {
-      const nextProfile = { ...s.profile, ...patch };
-      saveToDb("profile", nextProfile);
-      return { ...s, profile: nextProfile };
-    });
-  }, [])
+  const updateProfile = useCallback(async (patch: Partial<typeof defProfile & { customLogo?: string; favicon?: string }>) => {
+    const nextProfile = { ...state.profile, ...patch };
+    await saveToDb("profile", nextProfile);
+    setState(s => ({ ...s, profile: nextProfile }));
+  }, [state.profile])
 
   const updateExperience = useCallback(async (val: typeof defExp) => {
-    setState(s => {
-      saveToDb("experience", val);
-      return { ...s, experience: val };
-    });
+    await saveToDb("experience", val);
+    setState(s => ({ ...s, experience: val }));
   }, [])
 
   const updateEducation = useCallback(async (val: typeof defEdu) => {
-    setState(s => {
-      saveToDb("education", val);
-      return { ...s, education: val };
-    });
+    await saveToDb("education", val);
+    setState(s => ({ ...s, education: val }));
   }, [])
 
   const updateSkills = useCallback(async (val: typeof defSkills) => {
-    setState(s => {
-      saveToDb("skills", val);
-      return { ...s, skills: val };
-    });
+    await saveToDb("skills", val);
+    setState(s => ({ ...s, skills: val }));
   }, [])
 
   const updateProjects = useCallback(async (val: typeof defProjects) => {
-    setState(s => {
-      saveToDb("projects", val);
-      return { ...s, projects: val };
-    });
+    await saveToDb("projects", val);
+    setState(s => ({ ...s, projects: val }));
   }, [])
 
   const updateTestimonials = useCallback(async (val: typeof defTesti) => {
-    setState(s => {
-      saveToDb("testimonials", val);
-      return { ...s, testimonials: val };
-    });
+    await saveToDb("testimonials", val);
+    setState(s => ({ ...s, testimonials: val }));
   }, [])
 
   const updateRecommendations = useCallback(async (val: typeof defRecs) => {
-    setState(s => {
-      saveToDb("recommendations", val);
-      return { ...s, recommendations: val };
-    });
+    await saveToDb("recommendations", val);
+    setState(s => ({ ...s, recommendations: val }));
   }, [])
 
   const updateBlogPosts = useCallback(async (val: typeof defBlog) => {
-    setState(s => {
-      saveToDb("blogPosts", val);
-      return { ...s, blogPosts: val };
-    });
+    await saveToDb("blogPosts", val);
+    setState(s => ({ ...s, blogPosts: val }));
   }, [])
 
   const updateServices = useCallback(async (val: typeof defServices) => {
-    setState(s => {
-      saveToDb("services", val);
-      return { ...s, services: val };
-    });
+    await saveToDb("services", val);
+    setState(s => ({ ...s, services: val }));
   }, [])
 
   const updateTools = useCallback(async (val: typeof defTools) => {
-    setState(s => {
-      saveToDb("tools", val);
-      return { ...s, tools: val };
-    });
+    await saveToDb("tools", val);
+    setState(s => ({ ...s, tools: val }));
   }, [])
 
   const updateHireMe = useCallback(async (val: typeof defHireMe) => {
-    setState(s => {
-      saveToDb("hireMe", val);
-      return { ...s, hireMe: val };
-    });
+    await saveToDb("hireMe", val);
+    setState(s => ({ ...s, hireMe: val }));
   }, [])
 
   const updateAchievements = useCallback(async (val: typeof defAchieve) => {
-    setState(s => {
-      saveToDb("achievements", val);
-      return { ...s, achievements: val };
-    });
+    await saveToDb("achievements", val);
+    setState(s => ({ ...s, achievements: val }));
   }, [])
 
-  const updatePageBackgroundMap = useCallback(async (val: typeof defBgMap) => {
-    setState(s => {
-      saveToDb("pageBackgroundMap", val);
-      return { ...s, pageBackgroundMap: val };
-    });
+  const updatePageBackgroundMap = useCallback(async (val: Record<string, BGType>) => {
+    await saveToDb("pageBackgroundMap", val);
+    setState(s => ({ ...s, pageBackgroundMap: val }));
+  }, [])
+
+  const updateMessages = useCallback((msgs: ContactMessage[]) => {
+    setState(s => ({ ...s, messages: msgs }))
+  }, [])
+
+  const updateContacts = useCallback(async (val: Contact[]) => {
+    await saveToDb("contacts", val);
+    setState(s => ({ ...s, contacts: val }));
+  }, [])
+  const updateEmailTemplates = useCallback(async (val: EmailTemplate[]) => {
+    await saveToDb("emailTemplates", val);
+    setState(s => ({ ...s, emailTemplates: val }));
+  }, [])
+  const updateEmailLogs = useCallback(async (val: EmailLog[]) => {
+    await saveToDb("emailLogs", val);
+    setState(s => ({ ...s, emailLogs: val }));
+  }, [])
+  const updateFollowUps = useCallback(async (val: FollowUp[]) => {
+    await saveToDb("followUps", val);
+    setState(s => ({ ...s, followUps: val }));
+  }, [])
+  const updateEmailSettings = useCallback(async (val: EmailSettings) => {
+    await saveToDb("emailSettings", val);
+    setState(s => ({ ...s, emailSettings: val }));
   }, [])
 
   const resetAll = useCallback(async () => {
-    if (supabaseAdmin) {
-      await supabaseAdmin.from("portfolio_content").delete().neq("key", "")
+    try {
+      const { error } = await supabase.rpc('reset_portfolio_content')
+      if (error) console.warn('[Store] resetAll RPC failed:', error.message)
+    } catch (err) {
+      console.warn('[Store] resetAll failed:', err)
     }
     setState({
       profile: defProfile,
@@ -318,9 +369,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       education: defEdu,
       achievements: defAchieve,
       visibility: defVis,
-      pageBackgroundMap: defBgMap,
+      pageBackgroundMap: defBgMap as Record<string, BGType>,
       messages: [],
+      contacts: [],
+      emailTemplates: getDefaultTemplates(),
+      emailLogs: [],
+      followUps: [],
+      emailSettings: { resendApiKey: "", fromName: "", fromEmail: "", replyTo: "", adminEmail: "", sendAutoReply: true, sendAdminNotify: true, sendCvNotify: true, sendVisitorNotify: false, footerText: "", signatureHtml: "" },
       cvCount: 0,
+      admin_2fa: { enabled: false, encryptedSecret: "" },
     })
   }, [])
 
@@ -346,12 +403,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateHireMe,
       updateAchievements,
       updatePageBackgroundMap,
+      updateMessages,
+      updateContacts,
+      updateEmailTemplates,
+      updateEmailLogs,
+      updateFollowUps,
+      updateEmailSettings,
+      updateAdmin2FA: useCallback(async (val: { enabled: boolean; encryptedSecret: string }) => {
+        await saveToDb("admin_2fa", val);
+        setState(s => ({ ...s, admin_2fa: val }));
+      }, []),
       resetAll
     }}>
       {children}
     </StoreCtx.Provider>
   )
 }
+
 
 export function useStore() {
   const ctx = useContext(StoreCtx)

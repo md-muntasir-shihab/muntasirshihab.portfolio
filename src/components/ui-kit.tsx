@@ -29,20 +29,48 @@ export function ThemeProvider({children}:{children:ReactNode}){
 
 const t = (en:string, bn:string, lang:Lang)=> lang==='bn' ? bn : en
 
-export function PageShell({ bg, children, lang, setLang, title, subtitle }:{
+export function PageShell({ bg, children, title, subtitle, description }:{
   bg: BGType,
   children: ReactNode,
-  lang: Lang,
-  setLang: (l:Lang)=>void,
+  lang?: Lang,
+  setLang?: (l:Lang)=>void,
   title?: string,
-  subtitle?: string
+  subtitle?: string,
+  description?: string
 }){
   const {theme} = useContext(ThemeCtx)
+  const loc = useLocation()
+
+  useEffect(() => {
+    const defaultTitle = "MD MUNTASIR SHIHAB — Official Portfolio"
+    document.title = title ? `${title} | MD MUNTASIR SHIHAB` : defaultTitle
+
+    const metaDesc = document.querySelector('meta[name="description"]')
+    const descText = description || "MD Muntasir Shihab - B.Sc. Statistics student at Khulna University, Graphic & Brand Identity Designer, and Web Developer."
+    if (metaDesc) {
+      metaDesc.setAttribute("content", descText)
+    }
+
+    const ogTitle = document.querySelector('meta[property="og:title"]')
+    if (ogTitle) {
+      ogTitle.setAttribute("content", title ? `${title} | MD MUNTASIR SHIHAB` : defaultTitle)
+    }
+
+    const ogDesc = document.querySelector('meta[property="og:description"]')
+    if (ogDesc) {
+      ogDesc.setAttribute("content", descText)
+    }
+
+    const canonLink = document.querySelector('link[rel="canonical"]')
+    if (canonLink) {
+      canonLink.setAttribute("href", `https://muntasirshihab.com${loc.pathname}`)
+    }
+  }, [title, description, loc.pathname])
+
   return (
     <div className={`relative min-h-screen ${theme==="light"?"bg-[#f5f3ee] text-[#1a1a1f]":""}`}>
       {theme==="dark" && <AnimatedBackground type={bg} />}
       {theme==="light" && <div className="fixed inset-0 -z-20 bg-[#f5f3ee]"/>}
-      <Navbar lang={lang} setLang={setLang} />
       <main className="relative z-10 pt-[110px] md:pt-[100px] pb-24">
         {(title || subtitle) && (
           <div className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
@@ -54,10 +82,6 @@ export function PageShell({ bg, children, lang, setLang, title, subtitle }:{
         )}
         {children}
       </main>
-      <Footer lang={lang} />
-      <ScrollProgress />
-      {/* CustomCursor disabled — using native cursor */}
-      <BackToTop />
     </div>
   )
 }
@@ -79,10 +103,10 @@ export function PageTransition({children}:{children:ReactNode}){
   )
 }
 
-function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
+export function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
   const [open, setOpen] = useState(false)
   const {theme, toggle} = useContext(ThemeCtx)
-  const { visibility } = useStore()
+  const { visibility, profile } = useStore()
   const lt = theme==="light"
   // Nav links auto-hide when the matching section is disabled from the Admin panel
   const nav = [
@@ -100,7 +124,11 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
       <div className="max-w-6xl mx-auto px-4 md:px-8 pt-4">
         <div className={`rounded-[18px] px-4 md:px-6 h-[62px] flex items-center justify-between ${lt?"bg-white/95 backdrop-blur-xl border border-[#e5e0d4] shadow-sm":"bg-[#0c0c14]/92 backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.4)]"}`}>
           <Link to="/" className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-[11px] flex items-center justify-center text-[13px] font-[700] font-mono ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"gold-ring bg-[#14141f] gold-text"}`}>MS</div>
+            {profile.customLogo ? (
+              <img src={profile.customLogo} alt="Logo" className="h-9 max-w-[120px] object-contain rounded-md" />
+            ) : (
+              <div className={`w-9 h-9 rounded-[11px] flex items-center justify-center text-[13px] font-[700] font-mono ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"gold-ring bg-[#14141f] gold-text"}`}>MS</div>
+            )}
             <div className="block leading-tight max-w-[180px] sm:max-w-none">
               <div className={`text-[13.5px] sm:text-[14.5px] font-[650] tracking-[-0.01em] truncate ${lt?"text-[#1a1a1f]":""}`}>{profile.name[lang]}</div>
               <div className={`text-[10px] sm:text-[11px] -mt-[1px] truncate ${lt?"text-[#8a7a5c]":"text-[#9aa0ad]"}`}>{t("Statistics Student & Designer","পরিসংখ্যান শিক্ষার্থী ও ডিজাইনার",lang)}</div>
@@ -117,10 +145,12 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
 
           <div className="flex items-center gap-2.5">
             <button onClick={()=>setLang(lang==='en'?'bn':'en')}
+              title={lang==='en'?'Switch to Bangla':'ইংরেজিতে পরিবর্তন করুন'}
               className={`flex items-center gap-1.5 px-3 h-9 rounded-full text-[12.5px] font-[600] transition-colors ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass hover:border-yellow-500/30"}`}>
               <Globe size={14}/> {lang==='en'?'BN':'EN'}
             </button>
             <button onClick={toggle}
+              title={t("Toggle Theme", "থিম পরিবর্তন করুন", lang)}
               className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass hover:border-yellow-500/30"}`}>
               {theme==="dark" ? <Sun size={16}/> : <Moon size={16}/>}
             </button>
@@ -129,7 +159,9 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
                 <Download size={15}/> CV
               </ShimmerButton>
             </Link>
-            <button onClick={()=>setOpen(v=>!v)} className={`lg:hidden w-9 h-9 rounded-full flex items-center justify-center ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass"}`}>
+            <button onClick={()=>setOpen(v=>!v)}
+              title={t("Toggle Menu", "মেনু পরিবর্তন করুন", lang)}
+              className={`lg:hidden w-9 h-9 rounded-full flex items-center justify-center ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass"}`}>
               {open ? <X size={17}/> : <Menu size={17}/>}
             </button>
           </div>
@@ -160,7 +192,7 @@ function Navbar({ lang, setLang }: { lang: Lang, setLang: (l:Lang)=>void }){
   )
 }
 
-function Footer({ lang }:{lang:Lang}){
+export function Footer({ lang }:{lang:Lang}){
   const {theme} = useContext(ThemeCtx)
   const lt = theme==="light"
   const year = new Date().getFullYear()
@@ -320,7 +352,7 @@ export function SectionHeading({kicker, title, right}:{kicker?:string, title:str
   )
 }
 
-function ScrollProgress(){
+export function ScrollProgress(){
   const [p,setP]=useState(0)
   useEffect(()=>{
     const h=()=> setP(window.scrollY / (document.body.scrollHeight - innerHeight))
@@ -329,7 +361,7 @@ function ScrollProgress(){
   return <div className="fixed left-0 top-0 h-[2.5px] bg-[#e7b84b] z-[60]" style={{width: `${p*100}%`, boxShadow:"0 0 16px rgba(231,184,75,.45)"}}/>
 }
 
-function CustomCursor(){
+export function CustomCursor(){
   const dot = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   useEffect(()=>{
@@ -353,12 +385,14 @@ function CustomCursor(){
   )
 }
 
-function BackToTop(){
+export function BackToTop(){
   const [show,setShow]=useState(false)
+  const lang = (localStorage.getItem("rm_lang") as Lang) || "en"
   useEffect(()=>{ const f=()=>setShow(scrollY>520); addEventListener('scroll',f); return()=>removeEventListener('scroll',f)},[])
   if(!show) return null
   return (
     <button onClick={()=>scrollTo({top:0,behavior:'smooth'})}
+      title={t("Back to Top", "উপরে যান", lang)}
       className="fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full glass flex items-center justify-center hover:border-yellow-500/30">
       <Rocket size={16} className="text-[#f0c76a]" />
     </button>

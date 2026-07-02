@@ -1,7 +1,8 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
+import { uploadImage } from "../../lib/supabase"
 import { type Lang } from "../../lib/data"
-import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
+import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X, Upload, Loader } from "lucide-react"
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
@@ -13,6 +14,7 @@ interface BlogPost {
   excerpt: { en: string; bn: string }
   content?: { en: string; bn: string }
   tags: string[]
+  image?: string
 }
 
 export default function BlogManager({ lang }: { lang: Lang }) {
@@ -27,9 +29,25 @@ export default function BlogManager({ lang }: { lang: Lang }) {
     excerpt: { en: "", bn: "" },
     content: { en: "", bn: "" },
     tags: [],
+    image: "",
   })
 
   const [newTag, setNewTag] = useState("")
+  const [uploadingImageState, setUploadingImageState] = useState(false)
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingImageState(true)
+    try {
+      const result = await uploadImage(file, "blog")
+      setCurrentItem((prev) => ({ ...prev, image: result.url }))
+    } catch (err: any) {
+      alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
+    } finally {
+      setUploadingImageState(false)
+    }
+  }
 
   const handleStartEdit = (index: number) => {
     setEditingIdx(index)
@@ -43,6 +61,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
       excerpt: base.excerpt ? { ...base.excerpt } : { en: "", bn: "" },
       content: base.content ? { ...base.content } : { en: "", bn: "" },
       tags: base.tags ? [...base.tags] : [],
+      image: base.image || "",
     })
   }
 
@@ -57,6 +76,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
       excerpt: { en: "", bn: "" },
       content: { en: "", bn: "" },
       tags: [],
+      image: "",
     })
   }
 
@@ -152,6 +172,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div>
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Blog Title (English)", "ব্লগ টাইটেল (ইংরেজি)", lang)}</label>
               <input
+                title={t("Blog Title (English)", "ব্লগ টাইটেল (ইংরেজি)", lang)}
                 value={currentItem.title.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, title: { ...currentItem.title, en: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
@@ -160,15 +181,50 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div>
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Blog Title (Bangla)", "ব্লগ টাইটেল (বাংলা)", lang)}</label>
               <input
+                title={t("Blog Title (Bangla)", "ব্লগ টাইটেল (বাংলা)", lang)}
                 value={currentItem.title.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, title: { ...currentItem.title, bn: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
 
+            {/* Blog Cover Image */}
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Blog Post Cover Image", "ব্লগ পোস্ট কভার ছবি", lang)}</label>
+              <div className="flex flex-col sm:flex-row gap-4 items-center p-4 rounded-[14px] bg-black/20 border border-white/[0.08]">
+                {currentItem.image ? (
+                  <div className="relative group w-36 h-20 rounded-lg overflow-hidden border border-white/10 bg-black/40 flex items-center justify-center shrink-0">
+                    <img src={currentItem.image} alt="Blog Cover" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setCurrentItem({ ...currentItem, image: "" })}
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 transition"
+                      title={t("Remove Image", "ছবি সরান", lang)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-36 h-20 rounded-lg border border-dashed border-white/20 bg-black/20 flex flex-col items-center justify-center text-[#7e8391] shrink-0">
+                    <span className="text-[10px] font-mono">NO IMAGE</span>
+                  </div>
+                )}
+
+                <div className="flex-1 space-y-1.5 text-center sm:text-left">
+                  <label className="inline-flex px-4 h-9 rounded-lg bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] items-center justify-center gap-2 cursor-pointer transition text-[12.5px] font-[600]">
+                    {uploadingImageState ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {t("Upload Cover Image", "কভার ছবি আপলোড", lang)}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  </label>
+                  <p className="text-[11px] text-[#7e8391]">{t("Landscape banner format recommended (max 3MB)", "ল্যান্ডস্কেপ ব্যানার ফরম্যাট সাজেস্টেড (সর্বোচ্চ ৩MB)", lang)}</p>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Slug (URL Path)", "স্ল্যাগ (URL পাথ)", lang)}</label>
               <input
+                title={t("Slug (URL Path)", "স্ল্যাগ (URL পাথ)", lang)}
                 value={currentItem.slug}
                 onChange={(e) => setCurrentItem({ ...currentItem, slug: e.target.value })}
                 placeholder="e.g. my-first-blog"
@@ -180,6 +236,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
               <div>
                 <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Publish Date", "প্রকাশের তারিখ", lang)}</label>
                 <input
+                  title={t("Publish Date", "প্রকাশের তারিখ", lang)}
                   type="date"
                   value={currentItem.date}
                   onChange={(e) => setCurrentItem({ ...currentItem, date: e.target.value })}
@@ -189,6 +246,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
               <div>
                 <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Read Time", "পড়ার সময়কাল", lang)}</label>
                 <input
+                  title={t("Read Time", "পড়ার সময়কাল", lang)}
                   value={currentItem.read}
                   onChange={(e) => setCurrentItem({ ...currentItem, read: e.target.value })}
                   className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
@@ -200,6 +258,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Tags", "ট্যাগসমূহ", lang)}</label>
               <div className="flex gap-2 mt-[6px]">
                 <input
+                  title={t("Tags", "ট্যাগসমূহ", lang)}
                   value={newTag}
                   onChange={(e) => setNewTag(e.target.value)}
                   placeholder="e.g. Design"
@@ -229,6 +288,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div className="md:col-span-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Excerpt / Summary (English)", "সংক্ষিপ্ত সারমর্ম (ইংরেজি)", lang)}</label>
               <textarea
+                title={t("Excerpt / Summary (English)", "সংক্ষিপ্ত সারমর্ম (ইংরেজি)", lang)}
                 value={currentItem.excerpt.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, excerpt: { ...currentItem.excerpt, en: e.target.value } })}
                 rows={2}
@@ -238,6 +298,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div className="md:col-span-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Excerpt / Summary (Bangla)", "সংক্ষিপ্ত সারমর্ম (বাংলা)", lang)}</label>
               <textarea
+                title={t("Excerpt / Summary (Bangla)", "সংক্ষিপ্ত সারমর্ম (বাংলা)", lang)}
                 value={currentItem.excerpt.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, excerpt: { ...currentItem.excerpt, bn: e.target.value } })}
                 rows={2}
@@ -248,6 +309,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div className="md:col-span-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Full Article Content (English - Markdown/Text)", "মূল লেখা (ইংরেজি)", lang)}</label>
               <textarea
+                title={t("Full Article Content (English - Markdown/Text)", "মূল লেখা (ইংরেজি)", lang)}
                 value={currentItem.content?.en || ""}
                 onChange={(e) => setCurrentItem({ ...currentItem, content: { ...currentItem.content!, en: e.target.value } })}
                 rows={6}
@@ -257,6 +319,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
             <div className="md:col-span-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Full Article Content (Bangla - Markdown/Text)", "মূল লেখা (বাংলা)", lang)}</label>
               <textarea
+                title={t("Full Article Content (Bangla - Markdown/Text)", "মূল লেখা (বাংলা)", lang)}
                 value={currentItem.content?.bn || ""}
                 onChange={(e) => setCurrentItem({ ...currentItem, content: { ...currentItem.content!, bn: e.target.value } })}
                 rows={6}
@@ -314,6 +377,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "up")}
                     disabled={idx === 0}
+                    title={t("Move Up", "উপরে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowUp size={13} />
@@ -321,6 +385,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "down")}
                     disabled={idx === blogPosts.length - 1}
+                    title={t("Move Down", "নিচে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowDown size={13} />

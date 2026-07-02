@@ -1,7 +1,8 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
 import { Check } from "lucide-react"
+import type { BGType } from "../backgrounds"
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
@@ -20,7 +21,7 @@ const BG_EFFECTS = [
 
 export default function PageBackgroundsManager({ lang }: { lang: Lang }) {
   const { pageBackgroundMap, updatePageBackgroundMap } = useStore()
-  const [bgMap, setBgMap] = useState<Record<string, string>>({ ...pageBackgroundMap })
+  const [bgMap, setBgMap] = useState<Record<string, BGType>>({ ...pageBackgroundMap })
 
   const routesList = [
     { path: "/", name: "Home / Entry Page", bnName: "হোম / মূল প্রবেশ পেজ" },
@@ -35,7 +36,7 @@ export default function PageBackgroundsManager({ lang }: { lang: Lang }) {
     { path: "/cv", name: "CV Viewer Page", bnName: "সিভি ভিউয়ার পেজ" },
   ]
 
-  const handleSelectChange = (path: string, effect: string) => {
+  const handleSelectChange = (path: string, effect: BGType) => {
     setBgMap((prev) => ({ ...prev, [path]: effect }))
   }
 
@@ -47,7 +48,7 @@ export default function PageBackgroundsManager({ lang }: { lang: Lang }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Page Background Themes", "পেজ ব্যাকগ্রাউন্ড থিম", lang)}</div>
+        <h2 className="text-[26px] font-[720] tracking-[-0.015em]">{t("Page Background Themes", "পেজ ব্যাকগ্রাউন্ড থিম", lang)}</h2>
         <p className="text-[13.5px] text-[#7e8391] mt-1.5">
           {t(
             "Assign premium, animated background effects to each route on your portfolio.",
@@ -61,19 +62,21 @@ export default function PageBackgroundsManager({ lang }: { lang: Lang }) {
         <div className="space-y-4">
           {routesList.map((route) => {
             const currentEffect = bgMap[route.path] || "beamsGold"
+            const selectId = `bg-select-${route.path.replace(/\//g, "root")}`
             return (
               <div
                 key={route.path}
                 className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-[11px] bg-white/[0.015] border border-white/[0.04] gap-3"
               >
                 <div>
-                  <div className="font-[600] text-[13.8px] text-[#e8e9ef]">{t(route.name, route.bnName, lang)}</div>
+                  <label htmlFor={selectId} className="font-[600] text-[13.8px] text-[#e8e9ef] block cursor-pointer">{t(route.name, route.bnName, lang)}</label>
                   <div className="text-[11px] font-mono text-yellow-500/80 mt-[2px]">{route.path}</div>
                 </div>
 
                 <select
+                  id={selectId}
                   value={currentEffect}
-                  onChange={(e) => handleSelectChange(route.path, e.target.value)}
+                  onChange={(e) => handleSelectChange(route.path, e.target.value as BGType)}
                   className="px-3 h-[36px] rounded-[8px] bg-[#1a1a24] border border-white/[0.1] text-[13px] text-[#e8e9ef] outline-none w-full sm:w-[180px]"
                 >
                   {BG_EFFECTS.map((fx) => (

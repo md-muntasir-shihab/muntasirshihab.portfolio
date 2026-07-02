@@ -76,6 +76,7 @@ export default function MediaManager({ lang }: { lang: Lang }) {
           <select
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
+            title={t("Select Folder", "ফোল্ডার নির্বাচন করুন", lang)}
             className="px-3 h-9 rounded-lg bg-black/25 border border-white/[0.12] text-white text-[13px] outline-none"
           >
             <option value="general">{t("General Assets", "সাধারণ ফাইল", lang)}</option>

@@ -23,14 +23,14 @@ test.describe('Security & Routing Tests', () => {
 
     // Test SQL Injection / XSS rejection
     console.log('Testing SQL Injection input validation');
-    await page.fill('input[type="email"]', "admin'quote@gmail.com");
+    await page.fill('input[name="admin_username"]', "admin'quote@gmail.com");
     await page.fill('input[type="password"]', "wrongpass");
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Invalid characters detected.')).toBeVisible();
 
     // Test invalid credentials and remaining attempts count decrementing
     console.log('Testing invalid credentials lockout mechanism');
-    await page.fill('input[type="email"]', "mm.xihab@gmail.com");
+    await page.fill('input[name="admin_username"]', "mm.xihab@gmail.com");
     await page.fill('input[type="password"]', "wrongpassword123");
     await page.click('button[type="submit"]');
     await expect(page.locator('text=Invalid credentials')).toBeVisible();

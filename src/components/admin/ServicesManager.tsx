@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
 import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
@@ -6,9 +6,11 @@ import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
 interface ServiceItem {
+  icon: string
   title: { en: string; bn: string }
   desc: { en: string; bn: string }
-  iconName: string
+  time: string
+  price: string
 }
 
 const AVAILABLE_ICONS = ["Palette", "Video", "Code2", "BarChart3", "Layers", "Cpu", "Globe", "MessageCircle"]
@@ -18,24 +20,35 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [currentItem, setCurrentItem] = useState<ServiceItem>({
+    icon: "Palette",
     title: { en: "", bn: "" },
     desc: { en: "", bn: "" },
-    iconName: "Palette",
+    time: "",
+    price: "",
   })
 
   const handleStartEdit = (index: number) => {
     setEditingIdx(index)
     setIsNew(false)
-    setCurrentItem(JSON.parse(JSON.stringify(services[index])))
+    const original = services[index]
+    setCurrentItem({
+      icon: original.icon || "Palette",
+      title: original.title || { en: "", bn: "" },
+      desc: original.desc || { en: "", bn: "" },
+      time: original.time || "",
+      price: original.price || "",
+    })
   }
 
   const handleStartAdd = () => {
     setEditingIdx(-1)
     setIsNew(true)
     setCurrentItem({
+      icon: "Palette",
       title: { en: "", bn: "" },
       desc: { en: "", bn: "" },
-      iconName: "Palette",
+      time: "",
+      price: "",
     })
   }
 
@@ -76,10 +89,11 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Services I Offer", "আমার সার্ভিসসমূহ", lang)}</div>
+        <h2 className="text-[26px] font-[720] tracking-[-0.015em]">{t("Services I Offer", "আমার সার্ভিসসমূহ", lang)}</h2>
         {editingIdx === null && (
           <button
             onClick={handleStartAdd}
+            aria-label={t("Add New Service", "নতুন সার্ভিস যোগ করুন", lang)}
             className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] flex items-center gap-1 cursor-pointer transition hover:brightness-110"
           >
             <Plus size={15} /> {t("Add New", "নতুন যোগ", lang)}
@@ -96,21 +110,43 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Service Title (English)", "সার্ভিস টাইটেল (ইংরেজি)", lang)}</label>
+              <label htmlFor="svc-title-en" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Service Title (English)", "সার্ভিস টাইটেল (ইংরেজি)", lang)}</label>
               <input
+                id="svc-title-en"
                 value={currentItem.title.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, title: { ...currentItem.title, en: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Service Title (Bangla)", "সার্ভিস টাইটেল (বাংলা)", lang)}</label>
+              <label htmlFor="svc-title-bn" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Service Title (Bangla)", "সার্ভিস টাইটেল (বাংলা)", lang)}</label>
               <input
+                id="svc-title-bn"
                 value={currentItem.title.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, title: { ...currentItem.title, bn: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
+
+            <div>
+              <label htmlFor="svc-time" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Delivery Time (e.g. 24-48 Hours)", "সময়কাল (যেমন: ২৪-৪৮ ঘণ্টা)", lang)}</label>
+              <input
+                id="svc-time"
+                value={currentItem.time}
+                onChange={(e) => setCurrentItem({ ...currentItem, time: e.target.value })}
+                className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
+              />
+            </div>
+            <div>
+              <label htmlFor="svc-price" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Price / Budget (e.g. Custom Quote)", "মূল্য / বাজেট", lang)}</label>
+              <input
+                id="svc-price"
+                value={currentItem.price}
+                onChange={(e) => setCurrentItem({ ...currentItem, price: e.target.value })}
+                className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
+              />
+            </div>
+
             <div className="md:col-span-2">
               <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Icon Selection", "আইকন নির্বাচন", lang)}</label>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -118,11 +154,11 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
                   <button
                     key={ic}
                     type="button"
-                    onClick={() => setCurrentItem({ ...currentItem, iconName: ic })}
+                    onClick={() => setCurrentItem({ ...currentItem, icon: ic })}
                     className={`px-3 py-1.5 rounded-lg border text-[12px] font-mono transition ${
-                      currentItem.iconName === ic
+                      currentItem.icon === ic
                         ? "bg-[#e7b84b]/10 border-[#e7b84b] text-[#e7b84b]"
-                        : "bg-white/[0.02] border-white/[0.08] text-[#9aa0ad] hover:border-white/20"
+                        : "bg-white/[0.02] border-white/[0.08] text-[#9aa0ad] hover:border-white/20 cursor-pointer"
                     }`}
                   >
                     {ic}
@@ -131,8 +167,9 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (English)", "বিবরণ (ইংরেজি)", lang)}</label>
+              <label htmlFor="svc-desc-en" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (English)", "বিবরণ (ইংরেজি)", lang)}</label>
               <textarea
+                id="svc-desc-en"
                 value={currentItem.desc.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, en: e.target.value } })}
                 rows={3}
@@ -140,8 +177,9 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (Bangla)", "বিবরণ (বাংলা)", lang)}</label>
+              <label htmlFor="svc-desc-bn" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (Bangla)", "বিবরণ (বাংলা)", lang)}</label>
               <textarea
+                id="svc-desc-bn"
                 value={currentItem.desc.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, bn: e.target.value } })}
                 rows={3}
@@ -186,12 +224,13 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
                   <div className="font-[650] text-[14.5px] text-[#e8e9ef]">
                     {svc.title[lang]}
                   </div>
-                  <div className="text-[12px] text-[#7e8391] mt-[3px]">{t("Icon: ", "আইকন: ", lang)}{svc.iconName}</div>
+                  <div className="text-[12px] text-[#7e8391] mt-[3px]">{t("Icon: ", "আইকন: ", lang)}{svc.icon}</div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleStartEdit(idx)}
+                    aria-label={`${t("Edit", "এডিট", lang)}: ${svc.title[lang]}`}
                     className="px-3 py-[5px] rounded-full glass hover:bg-white/[0.06] text-[12px] font-[550] flex items-center gap-1 cursor-pointer transition text-[#e7c879]"
                   >
                     <Edit2 size={12} /> {t("Edit", "এডিট", lang)}
@@ -199,6 +238,7 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "up")}
                     disabled={idx === 0}
+                    aria-label={t("Move Up", "উপরে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowUp size={13} />
@@ -206,12 +246,14 @@ export default function ServicesManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "down")}
                     disabled={idx === services.length - 1}
+                    aria-label={t("Move Down", "নিচে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowDown size={13} />
                   </button>
                   <button
                     onClick={() => handleDeleteItem(idx)}
+                    aria-label={`${t("Delete", "মুছুন", lang)}: ${svc.title[lang]}`}
                     className="px-3 py-[5px] rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-[12px] font-[550] text-red-400 cursor-pointer transition"
                   >
                     <Trash2 size={12} /> {t("Delete", "মুছুন", lang)}

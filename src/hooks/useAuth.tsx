@@ -7,6 +7,9 @@ import {
   firebaseLogin,
   firebaseLogout,
   onFirebaseAuthChange,
+  reauthenticateUser,
+  updateUserEmail,
+  updateUserPassword,
 } from "../lib/firebase"
 import { adminSecurity } from "../lib/store"
 
@@ -26,6 +29,7 @@ interface AuthContextType {
   loading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
+  changeCredentials: (opts: { currentPassword: string; newEmail?: string; newPassword: string }) => Promise<{ success: boolean; error?: string }>
   isFirebaseConfigured: boolean
 }
 
@@ -81,11 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = useCallback(async (usernameOrEmail: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    let resolvedEmail = usernameOrEmail.trim().toLowerCase()
+    if (resolvedEmail === "muntasir" || resolvedEmail === "admin") {
+      resolvedEmail = adminSecurity.EMAIL.toLowerCase()
+    }
+
     // Firebase Auth attempt
     if (isFirebaseConfigured) {
       try {
-        await firebaseLogin(email, password)
+        await firebaseLogin(resolvedEmail, password)
         return { success: true }
       } catch (err: any) {
         // Firebase login failed — fall through to demo check
@@ -95,10 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (adminSecurity.isLocked()) {
       return { success: false, error: `Account locked. Try again in ${adminSecurity.lockRemainingMin()} min.` }
     }
-    if (/['"<>;]|--|\bOR\b|\bUNION\b/i.test(email)) {
+    if (/['"<>;]|--|\bOR\b|\bUNION\b/i.test(resolvedEmail)) {
       return { success: false, error: "Invalid characters detected." }
     }
-    if (email.trim().toLowerCase() === adminSecurity.EMAIL && password === adminSecurity.PASSWORD) {
+    if (resolvedEmail === adminSecurity.EMAIL.toLowerCase() && password === adminSecurity.PASSWORD) {
       adminSecurity.reset()
       sessionStorage.setItem("rm_admin_authed", "1")
       setUser({
@@ -128,8 +137,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = "/"
   }, [])
 
+  const changeCredentials = useCallback(async (opts: { currentPassword: string; newEmail?: string; newPassword: string }): Promise<{ success: boolean; error?: string }> => {
+    // Firebase mode: reauthenticate then update
+    if (isFirebaseConfigured && user?.provider === "firebase") {
+      try {
+        await reauthenticateUser(opts.currentPassword)
+        if (opts.newEmail) {
+          await updateUserEmail(opts.newEmail)
+        }
+        if (opts.newPassword) {
+          await updateUserPassword(opts.newPassword)
+        }
+        return { success: true }
+      } catch (err: any) {
+        const msg = err?.message || String(err)
+        if (msg.includes("auth/email-already-in-use")) return { success: false, error: "Email already in use." }
+        if (msg.includes("auth/wrong-password") || msg.includes("auth/invalid-credential")) return { success: false, error: "Current password is incorrect." }
+        if (msg.includes("auth/weak-password")) return { success: false, error: "New password is too weak (min 6 chars)." }
+        if (msg.includes("auth/too-many-requests")) return { success: false, error: "Too many attempts. Try again later." }
+        return { success: false, error: `Firebase error: ${msg.slice(0, 80)}` }
+      }
+    }
+    // Demo mode: verify current password then update localStorage
+    if (opts.currentPassword !== adminSecurity.PASSWORD) {
+      return { success: false, error: "Current password is incorrect." }
+    }
+    if (opts.newEmail) {
+      adminSecurity.updateCreds(opts.newEmail, opts.newPassword || adminSecurity.PASSWORD)
+    }
+    if (opts.newPassword) {
+      adminSecurity.updateCreds(opts.newEmail || adminSecurity.EMAIL, opts.newPassword)
+    }
+    setUser(prev => prev ? { ...prev, email: opts.newEmail || prev.email } : prev)
+    return { success: true }
+  }, [user])
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isFirebaseConfigured }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, changeCredentials, isFirebaseConfigured }}>
       {children}
     </AuthContext.Provider>
   )

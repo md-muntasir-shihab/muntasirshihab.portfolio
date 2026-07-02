@@ -1,19 +1,21 @@
 import { BrowserRouter, Routes, Route, useLocation, Link, useParams, Navigate } from "react-router-dom"
-import { useEffect, useState, useMemo, useContext } from "react"
+import { useEffect, useState, useMemo, useContext, useRef } from "react"
 import { motion } from "framer-motion"
-import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, StatTicker, ThemeProvider, ThemeCtx } from "./components/ui-kit"
-import { profile, experience, skills, tools, projects, blogPosts, testimonials, recommendations, services, hireMe, education, achievements, type Lang, ADMIN_SLUG, sectionVisibility } from "./lib/data"
-import { StoreProvider, useStore, sanitize } from "./lib/store"
+import { PageShell, PageTransition, MagicCard, ShimmerButton, SectionHeading, StatTicker, ThemeProvider, ThemeCtx, Navbar, Footer, ScrollProgress, BackToTop } from "./components/ui-kit"
+import { profile, experience, skills, projects, blogPosts, testimonials, services, education, achievements, type Lang, ADMIN_SLUG } from "./lib/data"
+import { StoreProvider, useStore, sanitize, adminSecurity } from "./lib/store"
 import { supabase } from "./lib/supabase"
 import { useAuth, AuthProvider } from "./hooks/useAuth"
-import { sendContactNotification } from "./lib/email"
+import { verifyTOTP, generateSecret, getOTPAuthURI, encryptSecret, decryptSecret } from "./lib/totp"
+
+import { sendContactNotification, sendVisitorConfirmation, sendCvDownloadNotification } from "./lib/email"
+import { toast, Toaster } from "sonner"
 import { incrementCvDownload, getCvDownloadCount, incrementVisitorCount } from "./lib/upstash"
 import { GitHubLiveStats } from "./components/GitHubLiveStats"
 import ProfileEditor from "./components/admin/ProfileEditor"
 import ExperienceManager from "./components/admin/ExperienceManager"
 import EducationManager from "./components/admin/EducationManager"
 import SkillsManager from "./components/admin/SkillsManager"
-import ServicesManager from "./components/admin/ServicesManager"
 import ProjectsManager from "./components/admin/ProjectsManager"
 import AchievementsManager from "./components/admin/AchievementsManager"
 import SectionsManager from "./components/admin/SectionsManager"
@@ -23,9 +25,13 @@ import ContactHireManager from "./components/admin/ContactHireManager"
 import BlogManager from "./components/admin/BlogManager"
 import CVManager from "./components/admin/CVManager"
 import MediaManager from "./components/admin/MediaManager"
+import AnalyticsDashboard from "./components/admin/AnalyticsDashboard"
+import EmailManager from "./components/admin/EmailManager"
+import { trackVisitor, sendDuration, trackCvDownload, getGeo } from "./lib/analytics"
+import confetti from "canvas-confetti"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
-  ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu
+  ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu, Bell, ChevronRight, ChevronDown, AlertTriangle
 } from "lucide-react"
 
 // Social brand icons (inline SVG - brand-colored)
@@ -60,12 +66,7 @@ function SocialIcon({name, size=20, customLogo}:{name:string, size?:number, cust
 }
 
 const t = (en:string, bn:string, lang:Lang)=> lang==='bn' ? bn : en
-const bgMap: Record<string, any> = {
-  "/": "beamsGold", "/about": "floatingSpot", "/experience": "dnaHelix",
-  "/skills": "geoBoxes", "/projects": "galaxyBeams", "/blog": "starGlow",
-  "/testimonials": "cosmicNoise", "/recommendations": "cosmicNoise",
-  "/hire-me": "neonSpot", "/contact": "neuralWavy", "/cv": "particleGrid",
-}
+
 const SectionWrapper = ({ enabled, data, children }: { enabled: boolean, data?: any[], children: React.ReactNode }) => {
   if (!enabled || (data && data.length === 0)) return null
   return <>{children}</>
@@ -76,12 +77,27 @@ export default function App(){
   useEffect(()=>{ localStorage.setItem("rm_lang", lang); document.documentElement.lang = lang }, [lang])
   useEffect(()=>{
     incrementVisitorCount().catch(err => console.error("Failed to increment visitor count:", err))
+    trackVisitor()
+    window.addEventListener("beforeunload", sendDuration)
+    window.addEventListener("pagehide", sendDuration)
+    return () => {
+      window.removeEventListener("beforeunload", sendDuration)
+      window.removeEventListener("pagehide", sendDuration)
+    }
   }, [])
   return (
     <ThemeProvider>
       <AuthProvider>
         <StoreProvider>
           <MainContent lang={lang} setLang={setLang} />
+          <Toaster
+            position="top-right"
+            richColors
+            closeButton
+            toastOptions={{
+              style: { background: "#1a1a2e", color: "#e8e9ef", border: "1px solid rgba(255,255,255,0.08)" },
+            }}
+          />
         </StoreProvider>
       </AuthProvider>
     </ThemeProvider>
@@ -89,7 +105,17 @@ export default function App(){
 }
 
 function MainContent({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
-  const { loading: storeLoading } = useStore()
+  const { loading: storeLoading, profile } = useStore()
+
+  useEffect(() => {
+    if (!storeLoading && profile?.favicon) {
+      const links = document.querySelectorAll("link[rel*='icon']")
+      links.forEach(link => {
+        link.setAttribute("href", profile.favicon || "")
+      })
+    }
+  }, [storeLoading, profile?.favicon])
+
   if (storeLoading) {
     return (
       <div className="min-h-screen bg-[#07070b] flex items-center justify-center">
@@ -110,23 +136,31 @@ function MainContent({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
 function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
   const location = useLocation()
   return (
-    <PageTransition>
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<HomePage lang={lang} setLang={setLang} />} />
-        <Route path="/about" element={<AboutPage lang={lang} setLang={setLang} />} />
-        <Route path="/experience" element={<ExperiencePage lang={lang} setLang={setLang} />} />
-        <Route path="/skills" element={<SkillsPage lang={lang} setLang={setLang} />} />
-        <Route path="/projects" element={<ProjectsPage lang={lang} setLang={setLang} />} />
-        <Route path="/blog" element={<BlogPage lang={lang} setLang={setLang} />} />
-        <Route path="/blog/:slug" element={<BlogDetail lang={lang} setLang={setLang} />} />
-        <Route path="/testimonials" element={<TestimonialsPage lang={lang} setLang={setLang} />} />
-        <Route path="/recommendations" element={<RecommendationsPage lang={lang} setLang={setLang} />} />
-        <Route path="/hire-me" element={<Navigate to="/contact" replace />} />
-        <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
-        <Route path="/cv" element={<CvPage lang={lang} setLang={setLang} />} />
-        <Route path="*" element={<NotFoundPage lang={lang} setLang={setLang} />} />
-      </Routes>
-    </PageTransition>
+    <div className="relative min-h-screen">
+      <Navbar lang={lang} setLang={setLang} />
+      
+      <PageTransition>
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<HomePage lang={lang} setLang={setLang} />} />
+          <Route path="/about" element={<AboutPage lang={lang} setLang={setLang} />} />
+          <Route path="/experience" element={<ExperiencePage lang={lang} setLang={setLang} />} />
+          <Route path="/skills" element={<SkillsPage lang={lang} setLang={setLang} />} />
+          <Route path="/projects" element={<ProjectsPage lang={lang} setLang={setLang} />} />
+          <Route path="/blog" element={<BlogPage lang={lang} setLang={setLang} />} />
+          <Route path="/blog/:slug" element={<BlogDetail lang={lang} setLang={setLang} />} />
+          <Route path="/testimonials" element={<TestimonialsPage lang={lang} setLang={setLang} />} />
+          <Route path="/recommendations" element={<RecommendationsPage lang={lang} setLang={setLang} />} />
+          <Route path="/hire-me" element={<Navigate to="/contact" replace />} />
+          <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
+          <Route path="/cv" element={<CvPage lang={lang} setLang={setLang} />} />
+          <Route path="*" element={<NotFoundPage lang={lang} setLang={setLang} />} />
+        </Routes>
+      </PageTransition>
+      
+      <Footer lang={lang} />
+      <ScrollProgress />
+      <BackToTop />
+    </div>
   )
 }
 
@@ -136,119 +170,107 @@ function HomePage({ lang, setLang }:{lang:Lang,setLang:(l:Lang)=>void}){
   const { profile, hireMe, projects, tools, testimonials, visibility, pageBackgroundMap: bgMap } = useStore()
   return (
     <PageShell bg={bgMap["/"]} lang={lang} setLang={setLang}>
-      <section className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
-         <div className="grid lg:grid-cols-[1.18fr_.82fr] gap-12 items-center">
-          <div>
-            <div className={`inline-flex items-center gap-2 px-3 py-[7px] rounded-full text-[11.7px] mb-5 ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"glass text-[#e9d29a]"}`}>
-              <span className="w-[7px] h-[7px] rounded-full bg-[#5bd07a] shadow-[0_0_12px_rgba(91,208,122,.7)]" />
-              {t(hireMe.status.en, hireMe.status.bn, lang)}
-            </div>
-            <h1 className="text-[38px] md:text-[58px] font-[780] tracking-[-0.02em] leading-[0.96]">
-              <span className="gold-text">{profile.firstName}</span><br/>
-              {profile.lastName}
-            </h1>
-            <div className="mt-4 text-[17px] md:text-[20px] font-[500]">
-              <Typewriter lines={profile.roleLines[lang]} />
-            </div>
-            <p className={`max-w-[600px] text-[15.5px] leading-relaxed mt-5 ${lt?"text-[#5a5449]":"text-[#aeb3c2]"}`}>
-              {profile.bioShort[lang]}
-            </p>
-            <div className={`mt-6 inline-flex items-center gap-3 px-[14px] py-[11px] rounded-[14px] ${lt?"bg-[#f0e6cf] border border-[#dbc897]":"glass"}`}>
-              <div className="w-2 h-2 rounded-full bg-[#e7b84b] animate-pulse" />
-              <div className="text-[13px]">
-                <span className={lt?"text-[#8a8278]":"text-[#9aa0ad]"}>{t("Currently studying:","বর্তমানে অধ্যয়নরত:",lang)} </span>
-                <span className={lt?"text-[#8a6b2b]":"text-[#f0cf83]"}>{profile.currentlyWorkingOn[lang]}</span>
+      <div className="overflow-x-hidden w-full">
+        <section className="max-w-6xl mx-auto px-5 md:px-8 pt-10 md:pt-16">
+          <div className="grid lg:grid-cols-[1.18fr_.82fr] gap-12 items-center">
+            <div>
+              <div className={`inline-flex items-center gap-2 px-3 py-[7px] rounded-full text-[11.7px] mb-5 ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"glass text-[#e9d29a]"}`}>
+                <span className="w-[7px] h-[7px] rounded-full bg-[#5bd07a] shadow-[0_0_12px_rgba(91,208,122,.7)]" />
+                {t(hireMe.status.en, hireMe.status.bn, lang)}
               </div>
-            </div>
-            <div className="flex flex-wrap gap-3 mt-7">
-              <Link to="/cv"><ShimmerButton>{t("Download CV","CV ডাউনলোড",lang)}</ShimmerButton></Link>
-              <Link to="/projects" className={`px-5 h-10 rounded-full flex items-center gap-2 text-[13.8px] ${lt?"bg-white border border-[#e5e0d4] text-[#5a5449] hover:border-[#dbc897]":"glass hover:border-yellow-500/25"}`}>
-                {t("View Work","কাজ দেখুন",lang)} <ArrowUpRight size={16}/>
-              </Link>
-              <Link to="/contact" className={`px-5 h-10 rounded-full flex items-center gap-2 text-[13.8px] ${lt?"border border-[#dbc897] text-[#8a6b2b] hover:bg-[#f9f2e2]":"border border-yellow-500/28 text-[#f2cf84] hover:bg-yellow-500/7"}`}>
-                {t("Hire Me","নিয়োগ করুন",lang)}
-              </Link>
-            </div>
-            <div className={`flex flex-wrap gap-5 mt-8 text-[12.8px] ${lt?"text-[#8a8278]":"text-[#8f94a3]"}`}>
-              <span className="flex items-center gap-2"><MapPin size={14}/> {profile.location[lang]}</span>
-              <span className="flex items-center gap-2"><Clock size={14}/> GMT+6</span>
-              <span className="flex items-center gap-2"><Code2 size={14}/> {t("Graphics & Web","গ্রাফিক্স ও ওয়েব",lang)}</span>
-            </div>
-          </div>
-          <div className="relative">
-            <div className={`relative rounded-[28px] p-[18px] ${lt?"bg-white/70 border border-[#e5e0d4] shadow-lg":"glass gold-glow"}`}>
-              <div className="aspect-[4/4.6] rounded-[18px] overflow-hidden bg-[#0f1019] relative">
-                <TorusHero />
-                <div className="absolute bottom-0 inset-x-0 p-5 bg-gradient-to-t from-black/75 to-transparent">
-                  <div className="text-[12px] text-[#e7d7a6] font-mono">design • branding • statistics</div>
-                  <div className="text-[18px] font-[650] mt-1 text-white">{t("Creative Design & Data Systems","ক্রিয়েটিভ ডিজাইন ও ডাটা সিস্টেম",lang)}</div>
+              <h1 className="text-[38px] md:text-[58px] font-[780] tracking-[-0.02em] leading-[0.96]">
+                <span className="gold-text">{profile.firstName}</span><br/>
+                {profile.lastName}
+              </h1>
+              <div className="mt-4 text-[17px] md:text-[20px] font-[500]">
+                <Typewriter lines={profile.roleLines[lang]} />
+              </div>
+              <p className={`max-w-[600px] text-[15.5px] leading-relaxed mt-5 ${lt?"text-[#5a5449]":"text-[#aeb3c2]"}`}>
+                {profile.bioShort[lang]}
+              </p>
+              <div className={`mt-6 inline-flex items-center gap-3 px-[14px] py-[11px] rounded-[14px] ${lt?"bg-[#f0e6cf] border border-[#dbc897]":"glass"}`}>
+                <div className="w-2 h-2 rounded-full bg-[#e7b84b] animate-pulse" />
+                <div className="text-[13px]">
+                  <span className={lt?"text-[#8a8278]":"text-[#9aa0ad]"}>{t("Currently studying:","বর্তমানে অধ্যয়নরত:",lang)} </span>
+                  <span className={lt?"text-[#8a6b2b]":"text-[#f0cf83]"}>{profile.currentlyWorkingOn[lang]}</span>
                 </div>
               </div>
-              <FloatingPill style={{top:-14, right:22}} label={t("Graphic Design","গ্রাফিক ডিজাইন",lang)}/>
-              <FloatingPill style={{top:48, left:-18}} label={t("Statistics","পরিসংখ্যান",lang)}/>
-              <FloatingPill style={{bottom:66, right:-16}} label={t("Branding","ব্র্যান্ডিং",lang)}/>
+              <div className="flex flex-wrap gap-3 mt-7">
+                <Link to="/cv"><ShimmerButton>{t("Download CV","CV ডাউনলোড",lang)}</ShimmerButton></Link>
+                <Link to="/projects" className={`px-5 h-10 rounded-full flex items-center gap-2 text-[13.8px] ${lt?"bg-white border border-[#e5e0d4] text-[#5a5449] hover:border-[#dbc897]":"glass hover:border-yellow-500/25"}`}>
+                  {t("View Work","কাজ দেখুন",lang)} <ArrowUpRight size={16}/>
+                </Link>
+                <Link to="/contact" className={`px-5 h-10 rounded-full flex items-center gap-2 text-[13.8px] ${lt?"border border-[#dbc897] text-[#8a6b2b] hover:bg-[#f9f2e2]":"border border-yellow-500/28 text-[#f2cf84] hover:bg-yellow-500/7"}`}>
+                  {t("Hire Me","নিয়োগ করুন",lang)}
+                </Link>
+              </div>
+              <div className={`flex flex-wrap gap-5 mt-8 text-[12.8px] ${lt?"text-[#8a8278]":"text-[#8f94a3]"}`}>
+                <span className="flex items-center gap-2"><MapPin size={14}/> {profile.location[lang]}</span>
+                <span className="flex items-center gap-2"><Clock size={14}/> GMT+6</span>
+                <span className="flex items-center gap-2"><Code2 size={14}/> {t("Graphics & Web","গ্রাফিক্স ও ওয়েব",lang)}</span>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
-      <section className="max-w-6xl mx-auto px-5 md:px-8 mt-14">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {profile.stats.map((s,i)=> <StatTicker key={i} value={s.value} label={s.label[lang]} />)}
-        </div>
-      </section>
-      <SectionWrapper enabled={visibility.projects} data={projects.filter(p=>p.featured)}>
-        <section className="max-w-6xl mx-auto px-5 md:px-8 mt-16">
-          <SectionHeading kicker={t("Selected work","নির্বাচিত কাজ",lang)} title={t("Featured Projects","ফিচারড প্রজেক্ট",lang)} right={<Link to="/projects" className={`text-[13px] flex items-center gap-1 ${lt?"text-[#a0782e]":"text-[#d5b56a]"}`}>{t("View all","সবগুলো দেখুন",lang)} <ArrowUpRight size={15}/></Link>} />
-          <div className="grid md:grid-cols-3 gap-5">
-            {projects.filter(p=>p.featured).map(pr=>(
-              <MagicCard key={pr.id}>
-                <div className={`text-[11px] font-mono ${lt?"text-[#a0782e]":"text-[#d1b16a]"}`}>{pr.year}</div>
-                <div className={`text-[18px] font-[660] mt-2 tracking-[-0.012em] ${lt?"text-[#1a1a1f]":""}`}>{pr.title[lang]}</div>
-                <div className={`text-[13.6px] mt-2 leading-relaxed ${lt?"text-[#7a7366]":"text-[#a6acbb]"}`}>{pr.blurb[lang]}</div>
-                <div className="flex flex-wrap gap-[8px] mt-4 text-[11px]">
-                  {pr.tags.map(tg=><span key={tg} className={`px-[10px] py-[5px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.07] text-[#c8b27a]"}`}>{tg}</span>)}
+            <div className="relative">
+              <div className={`relative rounded-[28px] p-[18px] ${lt?"bg-white/70 border border-[#e5e0d4] shadow-lg":"glass gold-glow"}`}>
+                <div className="aspect-[4/4.6] rounded-[18px] overflow-hidden bg-[#0f1019] relative">
+                  <TorusHero />
+                  <div className="absolute bottom-0 inset-x-0 p-5 bg-gradient-to-t from-black/75 to-transparent">
+                    <div className="text-[12px] text-[#e7d7a6] font-mono">design • branding • statistics</div>
+                    <div className="text-[18px] font-[650] mt-1 text-white">{t("Creative Design & Data Systems","ক্রিয়েটিভ ডিজাইন ও ডাটা সিস্টেম",lang)}</div>
+                  </div>
                 </div>
-              </MagicCard>
-            ))}
-          </div>
-        </section>
-      </SectionWrapper>
-      <section className={`mt-16 overflow-hidden border-y py-6 ${lt?"border-[#e5e0d4] bg-[#faf7f0]":"border-white/[0.065] bg-[#0a0a12]/60"}`}>
-        <div className="marquee-track flex gap-10 whitespace-nowrap will-change-transform" style={{width:"200%"}}>
-          {[...tools,...tools].map((tl,i)=>(<span key={i} className={`text-[13.6px] font-mono ${lt?"text-[#8a8278]":"text-[#b7bcca]"}`}>&#9670; {tl}</span>))}
-        </div>
-      </section>
-      <SectionWrapper enabled={visibility.testimonials} data={testimonials}>
-        <section className="max-w-6xl mx-auto px-5 md:px-8 mt-16">
-          <SectionHeading kicker={t("Feedback","প্রতিক্রিয়া",lang)} title={t("What people say","মানুষ যা বলে",lang)} />
-          <div className="grid md:grid-cols-2 gap-5">
-            {testimonials.map((tm,idx)=>(
-              <MagicCard key={idx} className="moving-border">
-                <div className="flex items-center gap-1 text-[#f0c96b] mb-3">{Array.from({length:5}).map((_,i)=><Star key={i} size={14} fill="#f0c96b"/>)}</div>
-                <div className={`text-[15.3px] leading-relaxed ${lt?"text-[#3a3730]":"text-[#d2d5df]"}`}>"{tm.text[lang]}"</div>
-                <div className={`mt-4 text-[13px] ${lt?"text-[#7a7366]":"text-[#a6adbd]"}`}>— {tm.name}, <span className={lt?"text-[#a0782e]":"text-[#d6bf84]"}>{tm.role[lang]}</span></div>
-              </MagicCard>
-            ))}
-          </div>
-          <div className="text-center mt-7">
-            <Link to="/testimonials" className={`inline-flex items-center gap-2 text-[13.5px] ${lt?"text-[#a0782e]":"text-[#e2c37a]"}`}>{t("See all testimonials","সকল প্রশংসাপত্র দেখুন",lang)} <ArrowUpRight size={15}/></Link>
-          </div>
-        </section>
-      </SectionWrapper>
-      <section className="max-w-6xl mx-auto px-5 md:px-8 mt-16">
-        <div className={`rounded-[24px] p-7 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 ${lt?"bg-[#f9f2e2] border border-[#dbc897]":"glass gold-glow"}`}>
-          <div>
-            <div className={`text-[12px] font-mono uppercase tracking-widest ${lt?"text-[#a0782e]":"text-[#e7c779]"}`}>{t("Hire Me","নিয়োগ করুন",lang)}</div>
-            <div className={`text-[26px] md:text-[31px] font-[720] tracking-[-0.015em] mt-2 ${lt?"text-[#1a1a1f]":""}`}>
-              {t("Let's create something amazing together","চলুন একসাথে অসাধারণ কিছু তৈরি করি",lang)}
+                <FloatingPill style={{top:-14, right:22}} label={t("Graphic Design","গ্রাফিক ডিজাইন",lang)}/>
+                <FloatingPill style={{top:48, left:-18}} label={t("Statistics","পরিসংখ্যান",lang)}/>
+                <FloatingPill style={{bottom:66, right:-16}} label={t("Branding","ব্র্যান্ডিং",lang)}/>
+              </div>
             </div>
-            <div className={`text-[14px] mt-2 ${lt?"text-[#7a7366]":"text-[#a9aebd]"}`}>{t("Open to freelance, part-time, and contract work.","ফ্রিল্যান্স, পার্ট-টাইম ও কন্ট্র্যাক্ট কাজের জন্য উন্মুক্ত।",lang)}</div>
           </div>
-          <div className="flex gap-3">
-            <Link to="/contact"><ShimmerButton>{t("Contact & Hire","যোগাযোগ ও নিয়োগ",lang)}</ShimmerButton></Link>
+        </section>
+        <section className="max-w-6xl mx-auto px-5 md:px-8 mt-14">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {profile.stats.map((s,i)=> <StatTicker key={i} value={s.value} label={s.label[lang]} />)}
           </div>
-        </div>
-      </section>
+        </section>
+        <SectionWrapper enabled={visibility.projects} data={projects.filter(p=>p.featured)}>
+          <section className="max-w-6xl mx-auto px-5 md:px-8 mt-16">
+            <SectionHeading kicker={t("Selected work","নির্বাচিত কাজ",lang)} title={t("Featured Projects","ফিচারড প্রজেক্ট",lang)} right={<Link to="/projects" className={`text-[13px] flex items-center gap-1 ${lt?"text-[#a0782e]":"text-[#d5b56a]"}`}>{t("View all","সবগুলো দেখুন",lang)} <ArrowUpRight size={15}/></Link>} />
+            <div className="grid md:grid-cols-3 gap-5">
+              {projects.filter(p=>p.featured).map(pr=>(
+                <MagicCard key={pr.id}>
+                  <div className={`text-[11px] font-mono ${lt?"text-[#a0782e]":"text-[#d1b16a]"}`}>{pr.year}</div>
+                  <div className={`text-[18px] font-[660] mt-2 tracking-[-0.012em] ${lt?"text-[#1a1a1f]":""}`}>{pr.title[lang]}</div>
+                  <div className={`text-[13.6px] mt-2 leading-relaxed ${lt?"text-[#7a7366]":"text-[#a6acbb]"}`}>{pr.blurb[lang]}</div>
+                  <div className="flex flex-wrap gap-[8px] mt-4 text-[11px]">
+                    {pr.tags.map(tg=><span key={tg} className={`px-[10px] py-[5px] rounded-full ${lt?"bg-[#f0e6cf] text-[#8a6b2b] border border-[#dbc897]":"bg-white/[0.045] border border-white/[0.07] text-[#c8b27a]"}`}>{tg}</span>)}
+                  </div>
+                </MagicCard>
+              ))}
+            </div>
+          </section>
+        </SectionWrapper>
+        <section className={`mt-16 overflow-hidden border-y py-6 ${lt?"border-[#e5e0d4] bg-[#faf7f0]":"border-white/[0.065] bg-[#0a0a12]/60"}`}>
+          <div className="marquee-track flex gap-10 whitespace-nowrap will-change-transform" style={{width:"200%"}}>
+            {[...tools,...tools].map((tl,i)=>(<span key={i} className={`text-[13.6px] font-mono ${lt?"text-[#8a8278]":"text-[#b7bcca]"}`}>&#9670; {tl}</span>))}
+          </div>
+        </section>
+        <SectionWrapper enabled={visibility.testimonials} data={testimonials}>
+          <section className="max-w-6xl mx-auto px-5 md:px-8 mt-16">
+            <SectionHeading kicker={t("Feedback","প্রতিক্রিয়া",lang)} title={t("What people say","মানুষ যা বলে",lang)} />
+            <div className="grid md:grid-cols-2 gap-5">
+              {testimonials.map((tm,idx)=>(
+                <MagicCard key={idx} className="moving-border">
+                  <div className="flex items-center gap-1 text-[#f0c96b] mb-3">{Array.from({length:5}).map((_,i)=><Star key={i} size={14} fill="#f0c96b"/>)}</div>
+                  <div className={`text-[15.3px] leading-relaxed ${lt?"text-[#3a3730]":"text-[#d2d5df]"}`}>"{tm.text[lang]}"</div>
+                  <div className={`mt-4 text-[13px] ${lt?"text-[#7a7366]":"text-[#a6adbd]"}`}>— {tm.name}, <span className={lt?"text-[#a0782e]":"text-[#d6bf84]"}>{tm.role[lang]}</span></div>
+                </MagicCard>
+              ))}
+            </div>
+            <div className="text-center mt-7">
+              <Link to="/testimonials" className={`inline-flex items-center gap-2 text-[13.5px] ${lt?"text-[#a0782e]":"text-[#e2c37a]"}`}>{t("See all testimonials","সকল প্রশংসাপত্র দেখুন",lang)} <ArrowUpRight size={15}/></Link>
+            </div>
+          </section>
+        </SectionWrapper>
+      </div>
     </PageShell>
   )
 }
@@ -268,6 +290,7 @@ function Typewriter({ lines }:{lines:string[]}){
   return <span className="font-mono">{lines[idx % lines.length].slice(0,sub)}<span className="text-[#e7b84b] animate-pulse">|</span></span>
 }
 function TorusHero(){
+  const { profile } = useStore()
   const hasAvatar = profile.avatar && profile.avatar.trim() !== ""
   return (
     <div className="absolute inset-0 flex items-center justify-center">
@@ -372,7 +395,7 @@ function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
         <div className="space-y-5">
           <MagicCard>
             <div className={`text-[12px] font-mono ${lt?"text-[#a0782e]":"text-[#e4c274]"}`}>{t("EDUCATION","শিক্ষাগত যোগ্যতা",lang)}</div>
-            {education.map((ed,i)=>(<div key={`${ed.school}-${ed.period}`} className="mt-3"><div className={`text-[16px] font-[630] ${lt?"text-[#1a1a1f]":""}`}>{ed.degree[lang]}</div><div className={`text-[13.5px] ${lt?"text-[#a0782e]":"text-[#d5b96f]"}`}>{ed.school}</div><div className={`text-[13px] mt-1 ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{ed.period} | {ed.note[lang]}</div></div>))}
+            {education.map(ed=>(<div key={`${ed.school}-${ed.period}`} className="mt-3"><div className={`text-[16px] font-[630] ${lt?"text-[#1a1a1f]":""}`}>{ed.degree[lang]}</div><div className={`text-[13.5px] ${lt?"text-[#a0782e]":"text-[#d5b96f]"}`}>{ed.school}</div><div className={`text-[13px] mt-1 ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{ed.period} | {ed.note[lang]}</div></div>))}
           </MagicCard>
           <SectionWrapper enabled={sectionVisibility.achievements} data={achievements}>
             <MagicCard>
@@ -500,10 +523,17 @@ function BlogPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
         {blogPosts.map(post=>(
           <Link key={post.slug} to={`/blog/${post.slug}`}>
             <MagicCard className="h-full">
+              {post.image && (
+                <div className="aspect-[16/10] w-full overflow-hidden rounded-[12px] border border-white/[0.08] mb-3 bg-black/20">
+                  <img src={post.image} alt={post.title[lang]} className="w-full h-full object-cover group-hover:scale-[1.03] transition duration-500" />
+                </div>
+              )}
               <div className="text-[11px] font-mono text-[#dabe75]">{post.date} | {post.read}</div>
               <div className="text-[18px] font-[650] mt-2 leading-snug tracking-[-0.011em]">{post.title[lang]}</div>
-              <div className="text-[13.4px] text-[#aeb3c0] mt-2">{post.excerpt[lang]}</div>
-              <div className="flex gap-2 mt-4">{post.tags.map(tg=><span key={tg} className="text-[11px] px-[9px] py-[4px] rounded-full bg-white/[0.05] border border-white/[0.08] text-[#d8bc7d]">{tg}</span>)}</div>
+              <div className="text-[13.4px] text-[#aeb3c0] mt-2 line-clamp-3">{post.excerpt[lang]}</div>
+              <div className="flex flex-wrap gap-1.5 mt-4">
+                {post.tags.map(tg=><span key={tg} className="text-[10px] px-2.5 py-[3px] rounded-full bg-white/[0.05] border border-white/[0.08] text-[#d8bc7d]">{tg}</span>)}
+              </div>
             </MagicCard>
           </Link>
         ))}
@@ -517,9 +547,14 @@ function BlogDetail({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const post = blogPosts.find(b=>b.slug===slug)
   if(!post) return <Navigate to="/blog" replace />
   return (
-    <PageShell bg="starGlow" lang={lang} setLang={setLang} title={post.title[lang]} subtitle={`${post.date} | ${post.read}`}>
+    <PageShell bg="starGlow" lang={lang} setLang={setLang} title={post.title[lang]} subtitle={`${post.date} | ${post.read}`} description={post.excerpt[lang]}>
       <article className="max-w-3xl mx-auto px-5 md:px-8 mt-8">
         <MagicCard>
+          {post.image && (
+            <div className="aspect-[16/9] w-full overflow-hidden rounded-[14px] border border-white/[0.08] mb-6 bg-black/20">
+              <img src={post.image} alt={post.title[lang]} className="w-full h-full object-cover" />
+            </div>
+          )}
           <div className="text-[15.5px] leading-relaxed whitespace-pre-wrap space-y-4">
             {post.content ? post.content[lang] : post.excerpt[lang]}
           </div>
@@ -592,11 +627,11 @@ function RecommendationsPage(_p:{lang:Lang,setLang:(l:Lang)=>void}){
 // ============ CONTACT (Merged: Social + Hire Me + Form) ============
 function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const {theme}=useContext(ThemeCtx); const lt=theme==="light"
-  const { profile, hireMe, services, visibility: sectionVisibility, pageBackgroundMap: bgMap, addMessage } = useStore()
+  const { profile, hireMe, services, visibility: sectionVisibility, pageBackgroundMap: bgMap, addMessage, contacts, updateContacts, emailLogs, updateEmailLogs, emailSettings, emailTemplates } = useStore()
   const [sent,setSent]=useState(false)
   const [rateLimited,setRateLimited]=useState(false)
-  const [sending,setSending]=useState(false)
-  const [form,setForm]=useState({name:"",email:"",phone:"",message:""})
+  const [sending,setSending] = useState(false)
+  const [form,setForm]=useState({name:"",email:"",phone:"",subject:"",message:""})
   const handleChange=(field:string,val:string)=>setForm(p=>({...p,[field]:val}))
   const submit=async()=>{
     setSending(true)
@@ -612,6 +647,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     const cleanName = sanitize(form.name)
     const cleanEmail = sanitize(form.email)
     const cleanPhone = sanitize(form.phone)
+    const cleanSubject = sanitize(form.subject || "No Subject")
     const cleanMessage = sanitize(form.message)
     const timestamp = new Date().toISOString()
 
@@ -621,14 +657,129 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       phone: cleanPhone, message: cleanMessage,
     })
 
-    // Store to Supabase Database (parallel with email)
-    // Send email notification via Resend (parallel with Supabase)
-    const [supaResult, emailResult] = await Promise.allSettled([
-      supabase
-        .from('messages')
-        .insert([{ name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, created_at: timestamp }]),
-      sendContactNotification({ name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, timestamp }),
-    ])
+    // Auto-save lead to Contacts CRM
+    const exists = contacts.some((c) => c.email.toLowerCase() === cleanEmail.toLowerCase())
+    const nextContacts = [...contacts]
+    if (!exists) {
+      nextContacts.unshift({
+        id: Math.random().toString(36).slice(2, 11),
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        company: "",
+        source: "Contact Form",
+        tags: ["lead"],
+        notes: `[Contact Form Message]\nSubject: ${cleanSubject}\nMessage: ${cleanMessage}`,
+        isStarred: false,
+        lastContact: timestamp,
+      })
+    } else {
+      const idx = nextContacts.findIndex((c) => c.email.toLowerCase() === cleanEmail.toLowerCase())
+      if (idx !== -1) {
+        nextContacts[idx] = {
+          ...nextContacts[idx],
+          lastContact: timestamp,
+          notes: nextContacts[idx].notes + `\n\n[${new Date().toLocaleDateString()}] New Message:\nSubject: ${cleanSubject}\n${cleanMessage}`
+        }
+      }
+    }
+    await updateContacts(nextContacts)
+
+    // Store to Supabase Database via portfolio_content (parallel with email)
+    // Send email notifications via Resend depending on admin control
+    const promises: Promise<any>[] = [
+      (async () => {
+        const { data } = await supabase.from('portfolio_content').select('value').eq('key', 'messages').single()
+        const existing = data?.value || []
+        const newMsg = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          message: cleanMessage,
+          date: timestamp,
+          read: false
+        }
+        return supabase.rpc('upsert_portfolio_content', {
+          p_key: 'messages',
+          p_value: [newMsg, ...existing]
+        })
+      })()
+    ]
+
+    const runAdminEmail = emailSettings.sendAdminNotify !== false
+    const runVisitorEmail = emailSettings.sendAutoReply !== false
+    const emailCfg = {
+      resendApiKey: emailSettings.resendApiKey || hireMe.resendApiKey || undefined,
+      emailFrom: emailSettings.fromEmail || hireMe.emailFrom || undefined,
+      emailTo: emailSettings.adminEmail || hireMe.emailTo || undefined
+    }
+
+    // Compile templates if available
+    const compileTemplate = (subjectTpl: string, bodyTpl: string, vars: Record<string, string>) => {
+      let s = subjectTpl
+      let h = bodyTpl
+      for (const [key, val] of Object.entries(vars)) {
+        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+        s = s.replace(regex, val || '')
+        h = h.replace(regex, val || '')
+      }
+      return { subject: s, html: h }
+    }
+
+    const templateVars = {
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      subject: cleanSubject,
+      message: cleanMessage,
+      date: new Date(timestamp).toLocaleString()
+    }
+
+    const autoReplyTemplate = emailTemplates?.find(t => t.id === "auto_reply")
+    const adminNotifyTemplate = emailTemplates?.find(t => t.id === "admin_notify")
+
+    let visitorSubject: string | undefined
+    let visitorHtml: string | undefined
+    if (autoReplyTemplate) {
+      const compiled = compileTemplate(autoReplyTemplate.subject, autoReplyTemplate.bodyHtml, templateVars)
+      visitorSubject = compiled.subject
+      visitorHtml = compiled.html
+    }
+
+    let adminSubject: string | undefined
+    let adminHtml: string | undefined
+    if (adminNotifyTemplate) {
+      const compiled = compileTemplate(adminNotifyTemplate.subject, adminNotifyTemplate.bodyHtml, templateVars)
+      adminSubject = compiled.subject
+      adminHtml = compiled.html
+    }
+
+    if (runAdminEmail) {
+      promises.push(sendContactNotification({ 
+        name: cleanName, 
+        email: cleanEmail, 
+        phone: cleanPhone, 
+        message: cleanMessage, 
+        timestamp,
+        subject: adminSubject,
+        html: adminHtml
+      }, emailCfg))
+    } else {
+      promises.push(Promise.resolve(false))
+    }
+
+    if (runVisitorEmail) {
+      promises.push(sendVisitorConfirmation(cleanName, cleanEmail, cleanMessage, {
+        ...emailCfg,
+        subject: visitorSubject,
+        html: visitorHtml
+      }))
+    } else {
+      promises.push(Promise.resolve(false))
+    }
+
+    const [supaResult, adminEmailResult, visitorEmailResult] = await Promise.allSettled(promises)
 
     if (supaResult.status === 'rejected') {
       console.error('Supabase connection error:', supaResult.reason)
@@ -636,12 +787,46 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       console.error('Supabase insert error:', supaResult.value.error)
     }
 
-    if (emailResult.status === 'fulfilled' && emailResult.value) {
-      console.log('[Contact] Email notification sent successfully')
-    } else if (emailResult.status === 'rejected') {
-      console.error('[Contact] Email notification failed:', emailResult.reason)
+    const nextLogs = [...emailLogs]
+    if (runAdminEmail) {
+      const success = adminEmailResult.status === 'fulfilled' && adminEmailResult.value
+      nextLogs.push({
+        id: Math.random().toString(36).slice(2, 11),
+        toEmail: emailCfg.emailTo || "admin",
+        subject: `[Contact Form Alert] ${cleanSubject}`,
+        status: success ? "success" : "failed",
+        sentAt: timestamp,
+        type: "admin-notify",
+      })
+      if (success) {
+        console.log('[Contact] Admin email notification sent successfully')
+      } else {
+        console.error('[Contact] Admin email notification failed')
+      }
     }
 
+    if (runVisitorEmail) {
+      const success = visitorEmailResult.status === 'fulfilled' && visitorEmailResult.value
+      nextLogs.push({
+        id: Math.random().toString(36).slice(2, 11),
+        toEmail: cleanEmail,
+        subject: `Thank you for contacting me!`,
+        status: success ? "success" : "failed",
+        sentAt: timestamp,
+        type: "auto-reply",
+      })
+      if (success) {
+        console.log('[Contact] Visitor confirmation email sent successfully')
+      } else {
+        console.error('[Contact] Visitor confirmation email failed')
+      }
+    }
+
+    if (nextLogs.length > emailLogs.length) {
+      await updateEmailLogs(nextLogs)
+    }
+
+    toast.success(t("Message sent successfully!", "মেসেজ সফলভাবে পাঠানো হয়েছে!", lang))
     setSent(true)
     setSending(false)
   }
@@ -650,43 +835,62 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     <PageShell bg={bgMap["/contact"]} lang={lang} setLang={setLang} title={t("Contact","যোগাযোগ",lang)} subtitle={t("Get in Touch | Hire Me | Send a Message","যোগাযোগ করুন | নিয়োগ | মেসেজ পাঠান",lang)}>
       <div className="max-w-6xl mx-auto px-5 md:px-8 mt-8">
 
-        {/* Social & Quick Contact - Animated Grid */}
+        {/* Social & Quick Contact - Category-wise Animated Grid */}
         <div className="mb-10">
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-6">
             <div className="h-[1px] flex-1 bg-white/[0.08]"/>
             <div className={`text-[12px] font-mono tracking-widest ${lt?"text-[#a0782e]":"text-[#e7c879]"}`}>{t("CONNECT WITH ME","আমার সাথে সংযোগ করুন",lang)}</div>
             <div className="h-[1px] flex-1 bg-white/[0.08]"/>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-            {profile.socials.filter(s=> s.enabled !== false && s.url && s.url.trim()!=="").map((s, i) => (
-              <motion.a
-                key={s.name}
-                href={s.url}
-                target="_blank"
-                rel="noreferrer"
-                initial={{opacity:0, y:12}}
-                whileInView={{opacity:1, y:0}}
-                viewport={{once:true}}
-                transition={{duration:.35, delay: i*0.04}}
-                whileHover={{y:-6, scale:1.08, rotate: Math.sin(i)*2}}
-                whileTap={{scale:0.96}}
-                className={`group relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-[16px] cursor-pointer transition-colors ${lt?"bg-white border border-[#e5e0d4] hover:border-[#dbc897]":"glass hover:border-yellow-500/30"}`}
-                title={`${s.name}: ${s.handle}`}
-              >
-                <div
-                  className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 overflow-hidden ${lt?"bg-[#f0e6cf]":"bg-white/[0.06]"}`}
-                  style={{color: s.color || "#e7b84b"}}
-                >
-                  <SocialIcon name={s.name} size={20} customLogo={s.customLogo}/>
-                </div>
-                <div className={`text-[10.5px] font-[600] tracking-wide text-center ${lt?"text-[#5a5449] group-hover:text-[#8a6b2b]":"text-[#c8cad4] group-hover:text-white"}`}>{s.name}</div>
-                <motion.div
-                  className="absolute inset-0 rounded-[16px] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"
-                  style={{boxShadow: `0 0 30px ${s.color || 'rgba(231,184,75,0.25)'}, inset 0 0 0 1px ${s.color || 'rgba(231,184,75,0.2)'}`}}
-                />
-              </motion.a>
-            ))}
-          </div>
+
+          {/* Category-wise social links — fast hover, lightweight */}
+          {(() => {
+            const active = profile.socials.filter(s => s.enabled !== false && s.url && s.url.trim() !== "")
+            const cats: { key: string; en: string; bn: string; icon: any }[] = [
+              { key: "social", en: "Social", bn: "সোশ্যাল", icon: MessageCircle },
+              { key: "professional", en: "Professional", bn: "প্রফেশনাল", icon: ArrowUpRight },
+              { key: "design", en: "Design & Creative", bn: "ডিজাইন ও ক্রিয়েটিভ", icon: Code2 },
+            ]
+            const catLabel = (c: typeof cats[number]) => lang === "bn" ? c.bn : c.en
+            return (
+              <div className="space-y-6">
+                {cats.map(cat => {
+                  const items = active.filter(s => (s as any).category === cat.key)
+                  if (items.length === 0) return null
+                  const Icon = cat.icon
+                  return (
+                    <div key={cat.key}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Icon size={13} className={lt ? "text-[#a0782e]" : "text-[#e7b84b]"}/>
+                        <span className={`text-[11.5px] font-[620] tracking-wide uppercase ${lt ? "text-[#7a6f5a]" : "text-[#9aa0ad]"}`}>{catLabel(cat)}</span>
+                        <div className={`flex-1 h-[1px] ${lt ? "bg-[#e5e0d4]/60" : "bg-white/[0.05]"}`}/>
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                        {items.map((s) => (
+                          <a
+                            key={s.name}
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={`${s.name}: ${s.handle}`}
+                            className={`group relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-[16px] cursor-pointer transition-[transform,border-color] duration-200 ease-out hover:-translate-y-1.5 ${lt?"bg-white border border-[#e5e0d4] hover:border-[#dbc897]":"glass hover:border-yellow-500/30"}`}
+                          >
+                            <div
+                              className={`w-11 h-11 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 overflow-hidden ${lt?"bg-[#f0e6cf]":"bg-white/[0.06]"}`}
+                              style={{color: s.color || "#e7b84b"}}
+                            >
+                              <SocialIcon name={s.name} size={20} customLogo={s.customLogo}/>
+                            </div>
+                            <div className={`text-[10.5px] font-[600] tracking-wide text-center ${lt?"text-[#5a5449] group-hover:text-[#8a6b2b]":"text-[#c8cad4] group-hover:text-white"}`}>{s.name}</div>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
           {/* Email & Phone quick row (hidden if empty) */}
           {(profile.email || profile.phone) && (
             <div className={`grid gap-4 mt-5 ${profile.email && profile.phone ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>
@@ -766,13 +970,19 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                     <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Full Name","সম্পূর্ণ নাম",lang)} *</label>
                     <input required value={form.name} onChange={e=>handleChange("name",e.target.value)} className={inputCls} placeholder={t("Your full name","আপনার সম্পূর্ণ নাম",lang)} />
                   </div>
-                  <div>
-                    <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Email","ইমেইল",lang)} *</label>
-                    <input type="email" required value={form.email} onChange={e=>handleChange("email",e.target.value)} className={inputCls} placeholder={t("your@email.com","আপনার@ইমেইল.কম",lang)} />
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Email","ইমেইল",lang)} *</label>
+                      <input type="email" required value={form.email} onChange={e=>handleChange("email",e.target.value)} className={inputCls} placeholder={t("your@email.com","আপনার@ইমেইল.কম",lang)} />
+                    </div>
+                    <div>
+                      <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Phone Number","ফোন নম্বর",lang)}</label>
+                      <input type="tel" value={form.phone} onChange={e=>handleChange("phone",e.target.value)} className={inputCls} placeholder="+880 1X XXX XXXXX" />
+                    </div>
                   </div>
                   <div>
-                    <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Phone Number","ফোন নম্বর",lang)}</label>
-                    <input type="tel" value={form.phone} onChange={e=>handleChange("phone",e.target.value)} className={inputCls} placeholder="+880 1X XXX XXXXX" />
+                    <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Subject","বিষয়",lang)} *</label>
+                    <input required value={form.subject} onChange={e=>handleChange("subject",e.target.value)} className={inputCls} placeholder={t("Subject of your message","আপনার মেসেজের বিষয়",lang)} />
                   </div>
                   <div>
                     <label className={`text-[12px] ${lt?"text-[#8a8278]":"text-[#a7acb9]"}`}>{t("Message","মেসেজ",lang)} *</label>
@@ -786,7 +996,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                 <div className="py-10 text-center">
                   <div className="text-[24px] font-[700] gold-text">{t("Message sent!","মেসেজ পাঠানো হয়েছে!",lang)}</div>
                   <div className={`mt-2 text-[14px] ${lt?"text-[#7a7366]":"text-[#b4b8c5]"}`}>{t("I usually reply within 6-12 hours.","সাধারণত ৬-১২ ঘণ্টার মধ্যে উত্তর দিই।",lang)}</div>
-                  <button onClick={()=>{setSent(false);setForm({name:"",email:"",phone:"",message:""})}} className={`mt-5 px-5 py-2 rounded-full text-[13px] ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass text-[#f0cf89]"}`}>{t("Send another","আরেকটি পাঠান",lang)}</button>
+                  <button onClick={()=>{setSent(false);setForm({name:"",email:"",phone:"",subject:"",message:""})}} className={`mt-5 px-5 py-2 rounded-full text-[13px] ${lt?"bg-[#f0e6cf] text-[#6b5328] border border-[#dbc897]":"glass text-[#f0cf89]"}`}>{t("Send another","আরেকটি পাঠান",lang)}</button>
                 </div>
               )}
             </MagicCard>
@@ -845,7 +1055,7 @@ ${services.map(s=>`${s.title.en} — ${s.desc.en} (${s.time})`).join('\n')}
 }
 
 function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
-  const { profile, education, experience, skills, tools, achievements, services, cvCount, incCv, pageBackgroundMap: bgMap } = useStore()
+  const { profile, education, experience, skills, tools, achievements, services, cvCount, incCv, pageBackgroundMap: bgMap, hireMe, emailSettings, emailLogs, updateEmailLogs } = useStore()
   const [liveCount, setLiveCount] = useState<number|null>(null)
   useEffect(()=>{ getCvDownloadCount().then(setLiveCount) }, [])
   
@@ -854,6 +1064,50 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     // Upstash এ real download count increment করো
     const newCount = await incrementCvDownload()
     if(newCount>0) setLiveCount(newCount)
+
+    // 🎉 Confetti celebration on download
+    try {
+      confetti({
+        particleCount: 90, spread: 70, origin: { y: 0.7 },
+        colors: ["#e7b84b", "#f0d78a", "#ffffff", "#22d3ee"],
+        scalar: 0.9,
+      })
+    } catch { /* ignore */ }
+
+    // Centralised tracking (geo + parsed device + Supabase insert) + email
+    let ip = "", country = ""
+    try {
+      const geo = await getGeo()
+      ip = geo.ip; country = geo.country
+    } catch { /* ignore */ }
+
+    trackCvDownload().catch(() => {})
+
+    // Email notification if enabled
+    const runCvEmail = emailSettings.sendCvNotify !== false
+    const emailCfg = {
+      resendApiKey: emailSettings.resendApiKey || hireMe.resendApiKey || undefined,
+      emailFrom: emailSettings.fromEmail || hireMe.emailFrom || undefined,
+      emailTo: emailSettings.adminEmail || hireMe.emailTo || undefined
+    }
+
+    if (runCvEmail) {
+      try {
+        const success = await sendCvDownloadNotification(ip || "Unknown", country || "Unknown", emailCfg)
+        const nextLogs = [...emailLogs]
+        nextLogs.push({
+          id: Math.random().toString(36).slice(2, 11),
+          toEmail: emailCfg.emailTo || "admin",
+          subject: `CV Downloaded: Type ${type} (IP: ${ip || "Unknown"}, Location: ${country || "Unknown"})`,
+          status: success ? "success" : "failed",
+          sentAt: new Date().toISOString(),
+          type: "cv-download",
+        })
+        await updateEmailLogs(nextLogs)
+      } catch (e) {
+        console.warn("Failed to send CV download email notification:", e)
+      }
+    }
 
     const pdfUrl = type === "designed" ? profile.cvUrl : profile.atsCvUrl
     if (pdfUrl) {
@@ -912,25 +1166,41 @@ function NotFoundPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 }
 
 // ============ ADMIN ============
-const ADMIN_MENU: [string, string, string][] = [
-  ["dashboard","/","Dashboard|ড্যাশবোর্ড"],
-  ["profile","/profile","Profile|প্রোফাইল"],
-  ["sections","/sections","Sections|সেকশনসমূহ"],
-  ["bg","/bg","Page Backgrounds|পেজ ব্যাকগ্রাউন্ড"],
-  ["experience","/experience","Experience|অভিজ্ঞতা"],
-  ["education","/education","Education|শিক্ষা"],
-  ["skills","/skills","Skills|দক্ষতা"],
-  ["projects","/projects","Projects|প্রজেক্ট"],
-  ["achievements","/achievements","Achievements|অর্জনসমূহ"],
-  ["contact","/contact","Contact & Hire|যোগাযোগ ও নিয়োগ"],
-  ["recs","/recs","Testimonials|প্রশংসাপত্র"],
-  ["blog","/blog","Blog|ব্লগ"],
-  ["messages","/messages","Messages|মেসেজসমূহ"],
-  ["media","/media","Media Library|মিডিয়া গ্যালারি"],
-  ["analytics","/analytics","Analytics|অ্যানালিটিক্স"],
-  ["cv","/cv","CV Manager|সিভি ম্যানেজার"],
-  ["security","/security","Security / 2FA|সিকিউরিটি"],
-  ["cache","/cache","Cache|ক্যাশ"],
+const ADMIN_MENU: { key: string; to: string; label: string; children?: { key: string; to: string; label: string }[] }[] = [
+  { key: "dashboard", to: "/", label: "Dashboard|ড্যাশবোর্ড" },
+  { key: "profile", to: "/profile", label: "Profile|প্রোফাইল", children: [
+    { key: "profile", to: "/profile", label: "Profile Editor|প্রোফাইল এডিটর" },
+    { key: "experience", to: "/experience", label: "Experience|অভিজ্ঞতা" },
+    { key: "education", to: "/education", label: "Education|শিক্ষা" },
+    { key: "skills", to: "/skills", label: "Skills|দক্ষতা" },
+    { key: "achievements", to: "/achievements", label: "Achievements|অর্জনসমূহ" },
+    { key: "cv", to: "/cv", label: "CV Manager|সিভি ম্যানেজার" },
+  ]},
+  { key: "content", to: "/projects", label: "Content|কনটেন্ট", children: [
+    { key: "projects", to: "/projects", label: "Projects|প্রজেক্ট" },
+    { key: "blog", to: "/blog", label: "Blog|ব্লগ" },
+    { key: "recs", to: "/recs", label: "Testimonials|প্রশংসাপত্র" },
+  ]},
+  { key: "contact", to: "/contact", label: "Contact|যোগাযোগ", children: [
+    { key: "contact", to: "/contact", label: "Contact & Hire|যোগাযোগ ও নিয়োগ" },
+    { key: "messages", to: "/messages", label: "Messages|মেসেজসমূহ" },
+  ]},
+  { key: "pagesettings", to: "/sections", label: "Page Settings|পেজ সেটিংস", children: [
+    { key: "sections", to: "/sections", label: "Sections|সেকশনসমূহ" },
+    { key: "bg", to: "/bg", label: "Page Backgrounds|পেজ ব্যাকগ্রাউন্ড" },
+    { key: "media", to: "/media", label: "Media Library|মিডিয়া গ্যালারি" },
+  ]},
+  { key: "analytics", to: "/analytics", label: "Analytics|অ্যানালিটিক্স" },
+  { key: "email", to: "/email", label: "Email Manager|ইমেইল ম্যানেজার", children: [
+    { key: "email", to: "/email", label: "Dashboard|ড্যাশবোর্ড" },
+    { key: "email/contacts", to: "/email/contacts", label: "Contacts CRM|কনট্যাক্টস CRM" },
+    { key: "email/compose", to: "/email/compose", label: "Compose|কম্পোজ" },
+    { key: "email/templates", to: "/email/templates", label: "Templates|টেমপ্লেটসমূহ" },
+    { key: "email/logs", to: "/email/logs", label: "Email Logs|ইমেইল লগস" },
+    { key: "email/settings", to: "/email/settings", label: "Email Settings|ইমেইল সেটিংস" },
+  ]},
+  { key: "security", to: "/security", label: "Security|সিকিউরিটি" },
+  { key: "cache", to: "/cache", label: "Cache|ক্যাশ" },
 ]
 
 function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
@@ -938,13 +1208,62 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
   const { user, loading, logout: authLogout } = useAuth()
   const [tfa, setTfa] = useState<boolean>(()=> sessionStorage.getItem("rm_admin_2fa")==="1")
   const [menuOpen, setMenuOpen] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    // Auto-expand the group that contains the current active key
+    const sub = location.pathname.replace(`/${ADMIN_SLUG}`, "").replace(/^\//, "") || ""
+    const activeKey = sub || "dashboard"
+    for (const item of ADMIN_MENU) {
+      if (item.children?.some(c => c.key === activeKey)) return new Set([item.key])
+    }
+    return new Set()
+  })
 
-  // 2FA disabled — will be enabled when admin turns it on from Security panel
-  const tfaEnabled = localStorage.getItem("rm_admin_2fa_enabled") === "1"
+  const { admin_2fa, messages, updateMessages } = useStore()
+  const tfaEnabled = (admin_2fa?.enabled && import.meta.env.PROD) || false
+  const unreadCount = messages.filter(m => !m.read).length
+
+  useEffect(() => {
+    const channel = supabase.channel('admin-messages-listener')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'portfolio_content', filter: 'key=eq.messages' }, (payload) => {
+        const msgs = payload.new.value || []
+        updateMessages(msgs)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [updateMessages])
+
+  // Toast notification on new messages
+  const prevMsgCountRef = useRef(messages.length)
+  useEffect(() => {
+    if (messages.length > prevMsgCountRef.current && prevMsgCountRef.current > 0) {
+      const latest = messages[0]
+      if (!latest?.read) {
+        toast.info(t(`📨 New message from ${latest?.name || "Unknown"}`, `📨 ${latest?.name || "অজানা"} এর নতুন মেসেজ`, lang), {
+          description: latest?.message?.slice(0, 80) + (latest?.message?.length > 80 ? "..." : ""),
+          duration: 6000,
+          action: {
+            label: t("View", "দেখুন", lang),
+            onClick: () => window.location.assign(`/${ADMIN_SLUG}/messages`)
+          }
+        })
+      }
+    }
+    prevMsgCountRef.current = messages.length
+  }, [messages.length, lang])
+
 
   // BUG-001 fix: determine active panel from the URL (after the secret slug)
   const sub = location.pathname.replace(`/${ADMIN_SLUG}`, "").replace(/^\//, "") || ""
-  const activeKey = (ADMIN_MENU.find(m => m[1] === `/${sub}`) || ADMIN_MENU[0])[0]
+  const activeKey = sub || "dashboard"
+
+  // Auto-expand the group containing the active route whenever URL changes
+  useEffect(() => {
+    for (const item of ADMIN_MENU) {
+      if (item.children?.some(c => c.key === activeKey)) {
+        setExpanded(prev => { const s = new Set(prev); s.add(item.key); return s })
+      }
+    }
+  }, [activeKey])
 
   if(loading) return (
     <div className="min-h-screen bg-[#07070b] flex items-center justify-center cursor-default">
@@ -958,13 +1277,46 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
   const label = (raw:string)=> raw.split("|")[lang==="bn"?1:0]
 
   const SidebarNav = ({onNav}:{onNav?:()=>void}) => (
-    <nav className="p-3 text-[13.6px] space-y-1 text-[#bcc1ce]">
-      {ADMIN_MENU.map(([key, to, raw])=>(
-        <Link key={key} to={`/${ADMIN_SLUG}${to}`} onClick={onNav}
-          className={`block px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] cursor-pointer transition-colors ${activeKey===key ? "bg-white/[0.06] text-[#f4d386]" : ""}`}>
-          {label(raw)}
-        </Link>
-      ))}
+    <nav className="p-3 text-[13.6px] space-y-[2px] text-[#bcc1ce]">
+      {ADMIN_MENU.map(item => {
+        const isLeaf = !item.children
+        const isActive = isLeaf && activeKey === item.key
+        const hasActive = item.children?.some(c => c.key === activeKey)
+        const isOpen = expanded.has(item.key)
+        return isLeaf ? (
+          <Link key={item.key} to={`/${ADMIN_SLUG}${item.to}`} onClick={onNav}
+            className={`flex items-center justify-between px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] cursor-pointer transition-colors ${isActive ? "bg-white/[0.06] text-[#f4d386]" : ""}`}>
+            <span>{label(item.label)}</span>
+          </Link>
+        ) : (
+          <div key={item.key}>
+            <button onClick={() => {
+                setExpanded(prev => { const s = new Set(prev); if (s.has(item.key)) s.delete(item.key); else s.add(item.key); return s })
+              }}
+              className={`w-full flex items-center justify-between px-3 py-[9px] rounded-[10px] hover:bg-white/[0.045] cursor-pointer transition-colors ${hasActive ? "text-[#f4d386]" : ""}`}>
+              <span>{label(item.label)}</span>
+              <span className="transition-transform duration-200">{isOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</span>
+            </button>
+            {isOpen && item.children && (
+              <div className="mt-[2px] ml-3 pl-3 border-l border-white/[0.06] space-y-[2px]">
+                {item.children.map(child => {
+                  const isMsg = child.key === "messages"
+                  const childActive = activeKey === child.key
+                  return (
+                    <Link key={child.key} to={`/${ADMIN_SLUG}${child.to}`} onClick={onNav}
+                      className={`flex items-center justify-between px-3 py-[8px] rounded-[9px] hover:bg-white/[0.045] cursor-pointer transition-colors text-[13px] ${childActive ? "bg-white/[0.06] text-[#f4d386]" : ""}`}>
+                      <span>{label(child.label)}</span>
+                      {isMsg && unreadCount > 0 && (
+                        <span className="min-w-[20px] h-[20px] flex items-center justify-center rounded-full bg-[#e7b84b] text-[#1a1410] text-[10.5px] font-[700] px-1.5">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
       <div className="flex gap-2 mt-3">
         <button onClick={()=>setLang(lang==="en"?"bn":"en")} className="flex-1 px-3 py-[9px] rounded-[10px] glass text-[12px] font-[600] cursor-pointer hover:bg-white/[0.06] transition">{lang==="en"?"বাংলা":"EN"}</button>
       </div>
@@ -1001,7 +1353,15 @@ function AdminApp({ lang, setLang }:{lang:Lang, setLang:(l:Lang)=>void}){
               <button onClick={()=>setMenuOpen(true)} aria-label="Open menu" className="lg:hidden w-9 h-9 rounded-[10px] glass flex items-center justify-center cursor-pointer"><Menu size={17}/></button>
               <div className="text-[14.5px]">{t("Portfolio Admin","পোর্টফোলিও অ্যাডমিন",lang)}</div>
             </div>
-            <div className={`text-[11.5px] flex items-center gap-2 ${tfaEnabled?"text-[#8f94a2]":"text-[#7e8391]"}`}><ShieldCheck size={14}/> {tfaEnabled ? t("2FA Enabled","2FA সক্রিয়",lang) : t("2FA Disabled","2FA নিষ্ক্রিয়",lang)}</div>
+            <div className="flex items-center gap-4">
+              <Link to={`/${ADMIN_SLUG}/messages`} className="relative flex items-center cursor-pointer group">
+                <Bell size={16} className="text-[#8f94a2] group-hover:text-[#e7b84b] transition"/>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-[#e7b84b] text-[#1a1410] text-[9px] font-[700] px-1 leading-none">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                )}
+              </Link>
+              <div className={`text-[11.5px] flex items-center gap-2 ${tfaEnabled?"text-[#8f94a2]":"text-[#7e8391]"}`}><ShieldCheck size={14}/> {tfaEnabled ? t("2FA Enabled","2FA সক্রিয়",lang) : t("2FA Disabled","2FA নিষ্ক্রিয়",lang)}</div>
+            </div>
             <Link to={`/${ADMIN_SLUG}/security`} className="text-[11px] text-[#d5b96f] hover:underline cursor-pointer">{t("Manage","ম্যানেজ",lang)}</Link>
           </div>
           <div className="p-5 md:p-8">
@@ -1031,6 +1391,13 @@ function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
     case "messages": return <AdminMessages lang={lang}/>
     case "media": return <MediaManager lang={lang}/>
     case "analytics": return <AdminAnalytics lang={lang}/>
+    case "email":
+    case "email/contacts":
+    case "email/compose":
+    case "email/templates":
+    case "email/logs":
+    case "email/settings":
+      return <EmailManager lang={lang}/>
     case "cv": return <CVManager lang={lang}/>
     case "security": return <AdminSecurity lang={lang}/>
     case "cache": return <AdminCache lang={lang}/>
@@ -1038,104 +1405,57 @@ function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
   }
 }
 
-function AdminEditor({lang, title, fields}:{lang:Lang, title:string, fields:[string,string][]}){
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{title}</div>
-      <div className="glass rounded-[18px] p-5 space-y-4 max-w-2xl">
-        {fields.map(([k,v])=>(
-          <div key={k}>
-            <label className="text-[12px] text-[#9aa0ad]">{k}</label>
-            <input defaultValue={v} placeholder={k} aria-label={k} className="w-full mt-[6px] px-4 h-[44px] rounded-[11px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b] text-[14px] cursor-text"/>
-          </div>
-        ))}
-        <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.5px] cursor-pointer hover:brightness-110 transition">{t("Save Changes","পরিবর্তন সংরক্ষণ",lang)}</button>
-        <div className="text-[11px] text-[#7e8391]">{t("Connect Firebase to persist edits live.","লাইভ সংরক্ষণে Firebase সংযুক্ত করুন।",lang)}</div>
-      </div>
-    </div>
-  )
-}
 
-function AdminList({lang, title, items}:{lang:Lang, title:string, items:string[]}){
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="text-[24px] font-[720]">{title}</div>
-        <button className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] cursor-pointer hover:brightness-110 transition">+ {t("Add New","নতুন যোগ",lang)}</button>
-      </div>
-      <div className="glass rounded-[18px] p-4 space-y-2">
-        {items.map((it,i)=>(
-          <div key={i} className="flex items-center justify-between px-4 py-3 rounded-[12px] bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-[13.5px] text-[#d2d5de]">{it}</span>
-            <div className="flex gap-2 text-[12px]">
-              <button className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Edit","এডিট",lang)}</button>
-              <button className="px-3 py-[5px] rounded-full glass text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Delete","মুছুন",lang)}</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
-function AdminSections({lang}:{lang:Lang}){
-  const { visibility, setVisibility } = useStore()
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Sections Manager","সেকশন ম্যানেজার",lang)}</div>
-      <div className="glass rounded-[18px] p-5 space-y-2 max-w-xl">
-        {Object.entries(visibility).map(([key,val])=>(
-          <div key={key} className="flex items-center justify-between px-4 py-3 rounded-[12px] bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-[14px] capitalize">{key}</span>
-            <button onClick={()=>setVisibility(key as any, !val)}
-              className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${val?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
-              <span className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all ${val?"left-[27px]":"left-[3px]"}`}/>
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="text-[11.5px] text-[#7e8391]">{t("Changes are saved instantly and reflect on public pages (e.g. Home featured sections).","পরিবর্তন তাৎক্ষণিক সংরক্ষিত হয় ও পাবলিক পেজে প্রতিফলিত হয়।",lang)}</div>
-    </div>
-  )
-}
 
-function AdminBackgrounds({lang}:{lang:Lang}){
-  const rows = Object.entries(bgMap)
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Page Backgrounds","পেজ ব্যাকগ্রাউন্ড",lang)}</div>
-      <div className="glass rounded-[18px] p-4 space-y-2">
-        {rows.map(([route,bg])=>(
-          <div key={route} className="flex items-center justify-between px-4 py-3 rounded-[12px] bg-white/[0.03] border border-white/[0.06]">
-            <span className="font-mono text-[13px] text-[#d2d5de]">{route}</span>
-            <span className="text-[12.5px] text-[#e7c879]">{String(bg)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function AdminContactSettings({lang}:{lang:Lang}){
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Contact & Hire Settings","যোগাযোগ ও নিয়োগ সেটিংস",lang)}</div>
-      <div className="grid md:grid-cols-2 gap-5">
-        <AdminEditor lang={lang} title={t("Availability","প্রাপ্যতা",lang)} fields={[
-          [t("Status (EN)","স্ট্যাটাস (EN)",lang), hireMe.status.en],
-          [t("WhatsApp","হোয়াটসঅ্যাপ",lang), hireMe.whatsapp],
-          [t("Calendly URL","ক্যালেন্ডলি URL",lang), hireMe.calendly],
-          [t("Notice Period","নোটিশ পিরিয়ড",lang), hireMe.notice.en],
-        ]}/>
-        <AdminList lang={lang} title={t("Services","সেবাসমূহ",lang)} items={services.map(s=>`${s.title[lang]} (${s.price})`)}/>
-      </div>
-    </div>
-  )
-}
 
 function AdminMessages({lang}:{lang:Lang}){
-  const { messages, markRead, deleteMessage } = useStore()
+  const { messages, markRead, deleteMessage, contacts, updateContacts } = useStore()
   const fmt=(iso:string)=>{ try{ return new Date(iso).toLocaleString() }catch{ return iso } }
+
+  const copyToClipboard = (text: string, type: "email" | "phone") => {
+    navigator.clipboard.writeText(text)
+    toast.success(type === "email" ? t("Email copied!", "ইমেইল কপি করা হয়েছে!", lang) : t("Phone number copied!", "ফোন নাম্বার কপি করা হয়েছে!", lang))
+  }
+
+  const handleUpdateContactType = async (msg: any, type: string) => {
+    const nextContacts = [...contacts]
+    const idx = nextContacts.findIndex((c) => c.email.toLowerCase() === msg.email.toLowerCase())
+
+    if (type === "none") {
+      if (idx !== -1) {
+        nextContacts[idx] = { ...nextContacts[idx], tags: [] }
+        await updateContacts(nextContacts)
+        toast.success(t("Contact type cleared", "কন্ট্যাক্ট টাইপ সরানো হয়েছে", lang))
+      }
+      return
+    }
+
+    if (idx !== -1) {
+      nextContacts[idx] = {
+        ...nextContacts[idx],
+        tags: [type]
+      }
+      await updateContacts(nextContacts)
+      toast.success(t(`Updated to ${type.toUpperCase()}`, `কন্ট্যাক্ট টাইপ ${type} করা হয়েছে`, lang))
+    } else {
+      nextContacts.unshift({
+        id: Math.random().toString(36).slice(2, 11),
+        name: msg.name,
+        email: msg.email,
+        phone: msg.phone || "",
+        company: "",
+        source: "Contact Form",
+        tags: [type],
+        notes: `[Created from Message Inbox]\nMessage: ${msg.message}`,
+        isStarred: false,
+        lastContact: new Date().toISOString()
+      })
+      await updateContacts(nextContacts)
+      toast.success(t(`Saved in CRM as ${type.toUpperCase()}`, `CRM-এ ${type} হিসেবে সেভ করা হয়েছে`, lang))
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -1150,16 +1470,71 @@ function AdminMessages({lang}:{lang:Lang}){
         <div className="glass rounded-[18px] p-4 space-y-2">
           {messages.map(d=>(
             <div key={d.id} className={`px-4 py-3 rounded-[12px] border ${d.read?"bg-white/[0.02] border-white/[0.05]":"bg-yellow-500/[0.04] border-yellow-500/20"}`}>
-              <div className="flex justify-between text-[13px]">
+              <div className="flex flex-wrap justify-between gap-1 text-[13px]">
                 <b className="flex items-center gap-2">{!d.read && <span className="w-2 h-2 rounded-full bg-[#e7b84b]"/>}{d.name}</b>
-                <span className="text-[#8a8f9c]">{fmt(d.date)}</span>
+                <span className="text-[#8a8f9c] text-[11px]">{fmt(d.date)}</span>
               </div>
-              <div className="text-[12px] text-[#9aa0ad]">{d.email}{d.phone && ` · ${d.phone}`}</div>
-              <div className="text-[13.5px] mt-1">{d.message}</div>
-              <div className="flex gap-2 mt-2 text-[12px]">
-                {!d.read && <button onClick={()=>markRead(d.id)} className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Mark read","পঠিত করুন",lang)}</button>}
-                <a href={`mailto:${d.email}`} className="px-3 py-[5px] rounded-full glass cursor-pointer hover:bg-white/[0.06] transition">{t("Reply","উত্তর",lang)}</a>
-                <button onClick={()=>deleteMessage(d.id)} className="px-3 py-[5px] rounded-full glass text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Delete","মুছুন",lang)}</button>
+              
+              <div className="text-[12px] text-[#9aa0ad] flex items-center flex-wrap gap-2 mt-1">
+                <span className="flex items-center gap-1 bg-white/[0.02] border border-white/5 py-0.5 px-2 rounded-md">
+                  <span>{d.email}</span>
+                  <button onClick={() => copyToClipboard(d.email, "email")} className="p-0.5 hover:bg-white/10 rounded text-gold hover:text-white transition cursor-pointer" title={t("Copy Email", "ইমেইল কপি করুন", lang)}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                  </button>
+                </span>
+                {d.phone && (
+                  <span className="flex items-center gap-1 bg-white/[0.02] border border-white/5 py-0.5 px-2 rounded-md">
+                    <span>{d.phone}</span>
+                    <button onClick={() => copyToClipboard(d.phone, "phone")} className="p-0.5 hover:bg-white/10 rounded text-gold hover:text-white transition cursor-pointer" title={t("Copy Phone", "ফোন কপি করুন", lang)}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[13.5px] mt-2.5 break-words bg-black/[0.15] border border-white/[0.03] p-3 rounded-lg text-[#cbd0df]">{d.message}</div>
+              
+              <div className="mt-3 pt-3 border-t border-white/[0.03] flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11.5px] text-[#7e8391]">{t("CRM Contact Type:", "কন্ট্যাক্ট টাইপ:", lang)}</span>
+                  <select
+                    value={contacts.find(c => c.email.toLowerCase() === d.email.toLowerCase())?.tags[0] || "none"}
+                    onChange={(e) => handleUpdateContactType(d, e.target.value)}
+                    className="text-[11px] px-2.5 py-1 rounded-md bg-black/45 border border-white/10 outline-none cursor-pointer text-[#cbd0df] hover:border-gold/30 hover:bg-black/60 transition"
+                  >
+                    <option value="none">{t("Not Classified", "শ্রেণীবিন্যাস ছাড়া", lang)}</option>
+                    <option value="lead">{t("Lead", "লিড (সম্ভাব্য)", lang)}</option>
+                    <option value="client">{t("Client", "ক্লায়েন্ট", lang)}</option>
+                    <option value="partner">{t("Partner", "পার্টনার", lang)}</option>
+                    <option value="spam">{t("Spam", "স্প্যাম (বাতিল)", lang)}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-wrap gap-2 text-[12px]">
+                  {!d.read && (
+                    <button
+                      onClick={()=>markRead(d.id)}
+                      className="flex items-center gap-1.5 px-3 py-[6px] rounded-full glass cursor-pointer hover:bg-white/[0.07] transition active:scale-95 text-[#a8b4c8]"
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <span>{t("Mark read","পঠিত",lang)}</span>
+                    </button>
+                  )}
+                  <a
+                    href={`/${ADMIN_SLUG}/email?to=${encodeURIComponent(d.email)}&name=${encodeURIComponent(d.name)}&subject=${encodeURIComponent("Re: " + (d.subject || "Your Message"))}`}
+                    className="flex items-center gap-1.5 px-3 py-[6px] rounded-full glass cursor-pointer hover:bg-blue-500/[0.12] text-[#7eb8f7] transition active:scale-95"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    <span>{t("Reply","উত্তর দিন",lang)}</span>
+                  </a>
+                  <button
+                    onClick={()=>deleteMessage(d.id)}
+                    className="flex items-center gap-1.5 px-3 py-[6px] rounded-full glass text-[#f29696] cursor-pointer hover:bg-red-500/[0.12] transition active:scale-95"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path strokeLinecap="round" strokeLinejoin="round" d="M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+                    <span>{t("Delete","মুছুন",lang)}</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -1170,74 +1545,260 @@ function AdminMessages({lang}:{lang:Lang}){
 }
 
 function AdminAnalytics({lang}:{lang:Lang}){
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Analytics","অ্যানালিটিক্স",lang)}</div>
-      <div className="grid md:grid-cols-3 gap-4">
-        {[[t("Visitors (7d)","ভিজিটর (৭দিন)",lang),"1,284"],[t("CV Downloads","CV ডাউনলোড",lang),"42"],[t("Avg. Time","গড় সময়",lang),"2m 41s"]].map(([k,v])=>(
-          <div key={k} className="glass rounded-[16px] px-5 py-4"><div className="text-[12px] text-[#a3a7b4]">{k}</div><div className="text-[26px] font-[730] gold-text mt-1">{v}</div></div>
-        ))}
-      </div>
-      <div className="glass rounded-[18px] p-5 text-[12.5px] text-[#9aa0ad]">{t("Referrals: LinkedIn 38% · Direct 27% · GitHub 19% · Google 16%","রেফারেল: LinkedIn 38% · Direct 27% · GitHub 19% · Google 16%",lang)}</div>
-    </div>
-  )
+  return <AnalyticsDashboard lang={lang} />
 }
 
-function AdminCV({lang}:{lang:Lang}){
-  return (
-    <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("CV / ATS Manager","সিভি ম্যানেজার",lang)}</div>
-      <div className="grid md:grid-cols-2 gap-5">
-        <div className="glass rounded-[18px] p-5">
-          <div className="text-[13px] font-mono text-[#e5c371] mb-3">{t("DESIGNED CV","ডিজাইনড সিভি",lang)}</div>
-          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full cursor-pointer hover:bg-white/[0.06] transition">{t("Upload PDF","PDF আপলোড",lang)}</button>
-        </div>
-        <div className="glass rounded-[18px] p-5">
-          <div className="text-[13px] font-mono text-[#e5c371] mb-3">{t("ATS CV","ATS সিভি",lang)}</div>
-          <button className="px-4 h-10 rounded-[11px] glass text-[13px] w-full cursor-pointer hover:bg-white/[0.06] transition">{t("Upload ATS PDF","ATS PDF আপলোড",lang)}</button>
-        </div>
-      </div>
-      <div className="text-[11.5px] text-[#7e8391]">{t("Live download counter syncs via Firebase/Upstash when connected.","সংযুক্ত হলে Firebase/Upstash দিয়ে লাইভ কাউন্টার সিঙ্ক হয়।",lang)}</div>
-    </div>
-  )
-}
 
 function AdminSecurity({lang}:{lang:Lang}){
-  const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
-  const toggleTfa = ()=>{
-    if(tfaOn){
-      localStorage.removeItem("rm_admin_2fa_enabled")
-      sessionStorage.removeItem("rm_admin_2fa")
+  const { admin_2fa, updateAdmin2FA } = useStore()
+  const tfaOn = admin_2fa?.enabled || false
+  
+  const [setupSecret, setSetupSecret] = useState("")
+  const [code, setCode] = useState("")
+  const [err, setErr] = useState("")
+  const [success, setSuccess] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  // ---- Change Credentials state ----
+  const { user: authUser, changeCredentials } = useAuth()
+  const currentEmail = authUser?.email || adminSecurity.EMAIL
+  const maskedEmail = currentEmail.replace(/(.{2})(.*)(@.*)/, "$1***$3")
+  const [credForm, setCredForm] = useState({ newEmail: "", currentPass: "", newPass: "", confirmPass: "" })
+  const [credBusy, setCredBusy] = useState(false)
+  const [credErr, setCredErr] = useState("")
+  const [credSuccess, setCredSuccess] = useState("")
+
+  const handleCredSubmit = async () => {
+    setCredErr(""); setCredSuccess(""); setCredBusy(true)
+    if (!credForm.currentPass) { setCredBusy(false); setCredErr(t("Current password is required.", "বর্তমান পাসওয়ার্ড আবশ্যক।", lang)); return }
+    if (credForm.newPass && credForm.newPass.length < 6) { setCredBusy(false); setCredErr(t("New password must be at least 6 characters.", "নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে।", lang)); return }
+    if (credForm.newPass && credForm.newPass !== credForm.confirmPass) { setCredBusy(false); setCredErr(t("New passwords do not match.", "নতুন পাসওয়ার্ড মিলছে না।", lang)); return }
+
+    const result = await changeCredentials({
+      currentPassword: credForm.currentPass,
+      newEmail: credForm.newEmail || undefined,
+      newPassword: credForm.newPass || "",
+    })
+    setCredBusy(false)
+    if (result.success) {
+      setCredSuccess(t("Credentials updated successfully! You may need to log in again.", "তথ্য সফলভাবে আপডেট হয়েছে! আবার লগইন করতে হতে পারে।", lang))
+      // If 2FA was active, disable it since password changed (used as XOR key)
+      if (tfaOn) {
+        await updateAdmin2FA({ enabled: false, encryptedSecret: "" })
+        localStorage.removeItem("rm_admin_2fa_enabled")
+        sessionStorage.removeItem("rm_admin_2fa")
+        setCredSuccess(t("Credentials updated! 2FA has been disabled because the password was changed. Please re-enable it.", "তথ্য আপডেট হয়েছে! পাসওয়ার্ড পরিবর্তনের কারণে 2FA নিষ্ক্রিয় হয়েছে। অনুগ্রহ করে আবার চালু করুন।", lang))
+      }
+      setCredForm({ newEmail: "", currentPass: "", newPass: "", confirmPass: "" })
     } else {
-      localStorage.setItem("rm_admin_2fa_enabled", "1")
+      setCredErr(result.error || t("Failed to update.", "আপডেট করতে ব্যর্থ।", lang))
     }
+  }
+
+  const handleStartSetup = () => {
+    setSetupSecret(generateSecret())
+    setErr("")
+    setSuccess("")
+  }
+
+  const otpauthURI = setupSecret ? getOTPAuthURI("muntasir", setupSecret) : ""
+  const qrCodeUrl = setupSecret ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(otpauthURI)}` : ""
+
+  const handleCopy = () => {
+    if (setupSecret) {
+      navigator.clipboard.writeText(setupSecret)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleVerifyAndEnable = async () => {
+    if (!setupSecret) return
+    setErr("")
+    setSuccess("")
+    setBusy(true)
+    const isValid = await verifyTOTP(setupSecret, code)
+    if (isValid) {
+      const encrypted = encryptSecret(setupSecret, adminSecurity.PASSWORD)
+      await updateAdmin2FA({ enabled: true, encryptedSecret: encrypted })
+      localStorage.setItem("rm_admin_2fa_enabled", "1")
+      sessionStorage.setItem("rm_admin_2fa", "1")
+      setBusy(false)
+      setSuccess("Two-Factor Authentication successfully enabled!")
+      setTimeout(() => {
+        setSetupSecret("")
+        setCode("")
+      }, 1500)
+    } else {
+      setBusy(false)
+      setErr("Invalid code. Please try again.")
+    }
+  }
+
+  const handleDisable = async () => {
+    setBusy(true)
+    await updateAdmin2FA({ enabled: false, encryptedSecret: "" })
+    localStorage.removeItem("rm_admin_2fa_enabled")
+    sessionStorage.removeItem("rm_admin_2fa")
+    setBusy(false)
     window.location.reload()
   }
+
   return (
     <div className="space-y-5">
-      <div className="text-[24px] font-[720]">{t("Security / 2FA","সিকিউরিটি / 2FA",lang)}</div>
-      <div className="glass rounded-[18px] p-5 space-y-3 max-w-xl text-[13.5px]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={16} className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}/>
-            <span className={tfaOn?"text-[#6ad08a]":"text-[#9aa0ad]"}>{tfaOn ? t("Two-Factor Authentication: Enabled","টু-ফ্যাক্টর অথেন্টিকেশন: সক্রিয়",lang) : t("Two-Factor Authentication: Disabled","টু-ফ্যাক্টর অথেন্টিকেশন: নিষ্ক্রিয়",lang)}</span>
+      <div className="text-[24px] font-[720]">{t("Security & 2FA","সিকিউরিটি ও 2FA",lang)}</div>
+      
+      {tfaOn ? (
+        <div className="glass rounded-[18px] p-5 space-y-4 max-w-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#e2f7e6]/10 flex items-center justify-center border border-[#6ad08a]/20">
+              <ShieldCheck className="text-[#6ad08a]" size={20}/>
+            </div>
+            <div>
+              <div className="text-[14.5px] font-[650] text-[#6ad08a]">{t("Two-Factor Authentication is Active","টু-ফ্যাক্টর অথেন্টিকেশন সক্রিয় আছে",lang)}</div>
+              <div className="text-[11.5px] text-[#9aa0ad]">{t("Your account is secured with Google Authenticator.","আপনার অ্যাকাউন্ট গুগল অথেনটিকেটর দ্বারা সুরক্ষিত।",lang)}</div>
+            </div>
           </div>
-          <button onClick={toggleTfa}
-            className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${tfaOn?"bg-[#5bd07a]":"bg-white/[0.12]"}`}>
-            <span className={`absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all ${tfaOn?"left-[27px]":"left-[3px]"}`}/>
-          </button>
+          <div className="border-t border-white/5 pt-4">
+            <button onClick={handleDisable} disabled={busy} className="px-5 h-[38px] rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/25 border border-red-500/20 text-[13px] font-[600] transition cursor-pointer disabled:opacity-50">
+              {t("Disable 2FA","2FA নিষ্ক্রিয় করুন",lang)}
+            </button>
+          </div>
         </div>
-        <div className={`flex items-center gap-2 ${tfaOn?"text-[#6ad08a]":"text-[#7e8391]"}`}><UserCheck size={16}/> {t("TOTP provider: otplib (Demo)","TOTP প্রোভাইডার: otplib (ডেমো)",lang)}</div>
-        <div className="text-[#c5c9d5]">{t("Active sessions: 1","সক্রিয় সেশন: ১",lang)}</div>
-        <div className="text-[#c5c9d5]">{t("Failed logins (24h): 0","ব্যর্থ লগইন (২৪ঘণ্টা): ০",lang)}</div>
-        <button className="px-4 h-10 rounded-full glass text-[13px] text-[#f29696] cursor-pointer hover:bg-white/[0.06] transition">{t("Logout all devices","সব ডিভাইস থেকে লগআউট",lang)}</button>
+      ) : (
+        <div className="glass rounded-[18px] p-6 max-w-2xl space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
+              <Lock className="text-gold" size={18}/>
+            </div>
+            <div>
+              <div className="text-[14.5px] font-[650] text-white">{t("Enable Two-Factor Authentication","টু-ফ্যাক্টর অথেন্টিকেশন চালু করুন",lang)}</div>
+              <div className="text-[11.5px] text-[#9aa0ad]">{t("Secure your admin portal access by linking Google Authenticator.","গুগল অথেনটিকেটর লিংক করে এডমিন পোর্টাল সুরক্ষিত করুন।",lang)}</div>
+            </div>
+          </div>
+
+          {!setupSecret ? (
+            <div className="border-t border-white/5 pt-5 text-center py-6">
+              <button onClick={handleStartSetup} className="px-6 h-[44px] rounded-xl bg-gold text-[#1a1410] font-[650] text-[13.5px] hover:brightness-110 transition cursor-pointer">
+                {t("Set Up Two-Factor Authentication","২-ফ্যাক্টর অথেন্টিকেশন সেটআপ করুন",lang)}
+              </button>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-[180px_1fr] gap-6 items-start border-t border-white/5 pt-5 animate-fadeIn">
+              <div className="bg-white p-2 rounded-lg inline-block mx-auto md:mx-0 shadow-md">
+                <img src={qrCodeUrl} alt="2FA QR Code" className="w-[160px] h-[160px] object-contain" />
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-1.5 text-[12.8px] text-[#b5bac7]">
+                  <p className="font-semibold text-white">1. Scan QR Code or manual enter Setup Key:</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <code className="bg-black/30 border border-white/10 px-3 py-1.5 rounded-[8px] text-[13px] font-mono text-gold tracking-wider select-all">{setupSecret}</code>
+                    <button onClick={handleCopy} className="px-3 h-8 rounded-[8px] glass text-[11.5px] font-medium hover:bg-white/10 transition cursor-pointer">
+                      {copied ? t("Copied!","কপি হয়েছে!",lang) : t("Copy","কপি করুন",lang)}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-white/5 pt-4">
+                  <p className="text-[12.8px] font-semibold text-white">2. Enter 6-digit code to verify & enable:</p>
+                  <div className="flex gap-2">
+                    <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} maxLength={6} placeholder="000000" disabled={busy}
+                      className="w-32 text-center text-[16px] font-mono h-[38px] rounded-lg bg-black/25 border border-white/12 outline-none focus:border-yellow-500/40 text-[#e8e9ef] caret-gold"/>
+                    <button onClick={handleVerifyAndEnable} disabled={code.length!==6 || busy} className="px-5 h-[38px] rounded-lg bg-gold text-[#1a1410] font-[650] text-[13px] hover:brightness-110 disabled:opacity-50 transition cursor-pointer flex items-center gap-2">
+                      {busy && <span className="w-3.5 h-3.5 border-2 border-black/40 border-t-black rounded-full animate-spin"/>}
+                      {t("Verify & Enable","যাচাই ও সক্রিয় করুন",lang)}
+                    </button>
+                  </div>
+                  {err && <div className="text-[12.5px] text-[#f29696] mt-1.5">{err}</div>}
+                  {success && <div className="text-[12.5px] text-[#6ad08a] mt-1.5">{success}</div>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- Change Credentials Card ---- */}
+      <div className="glass rounded-[18px] p-6 max-w-2xl space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#e7b84b]/10 flex items-center justify-center border border-[#e7b84b]/20">
+            <UserCheck className="text-[#e7b84b]" size={18}/>
+          </div>
+          <div>
+            <div className="text-[14.5px] font-[650]">{t("Account Settings","অ্যাকাউন্ট সেটিংস",lang)}</div>
+            <div className="text-[11.5px] text-[#9aa0ad]">{t("Change username/email and password","ইউজারনেম/ইমেইল ও পাসওয়ার্ড পরিবর্তন করুন",lang)}</div>
+          </div>
+        </div>
+
+        <div className="border-t border-white/5 pt-4 space-y-1 text-[13px]">
+          <div className="text-[#9aa0ad]">{t("Current Email","বর্তমান ইমেইল",lang)}</div>
+          <div className="text-[#e8e9ef] font-mono font-[600]">{maskedEmail}</div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[12px] text-[#9aa0ad] font-semibold">{t("New Email (optional)","নতুন ইমেইল (ঐচ্ছিক)",lang)}</label>
+            <input value={credForm.newEmail} onChange={e => setCredForm({ ...credForm, newEmail: e.target.value })} placeholder="new@email.com" disabled={credBusy}
+              className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/12 outline-none text-[#e8e9ef] text-[13.5px] focus:border-[#e7b84b]/40 transition disabled:opacity-50"/>
+          </div>
+          <div>
+            <label className="text-[12px] text-[#9aa0ad] font-semibold">{t("New Password (optional)","নতুন পাসওয়ার্ড (ঐচ্ছিক)",lang)}</label>
+            <input type="password" value={credForm.newPass} onChange={e => setCredForm({ ...credForm, newPass: e.target.value })} placeholder="••••••" disabled={credBusy}
+              className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/12 outline-none text-[#e8e9ef] text-[13.5px] focus:border-[#e7b84b]/40 transition disabled:opacity-50"/>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[12px] text-[#9aa0ad] font-semibold">{t("Confirm New Password","নতুন পাসওয়ার্ড নিশ্চিত করুন",lang)}</label>
+            <input type="password" value={credForm.confirmPass} onChange={e => setCredForm({ ...credForm, confirmPass: e.target.value })} placeholder="••••••" disabled={credBusy}
+              className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/12 outline-none text-[#e8e9ef] text-[13.5px] focus:border-[#e7b84b]/40 transition disabled:opacity-50"/>
+          </div>
+          <div>
+            <label className="text-[12px] text-[#f29696] font-semibold">{t("Current Password (required)","বর্তমান পাসওয়ার্ড (আবশ্যক)",lang)}</label>
+            <input type="password" value={credForm.currentPass} onChange={e => setCredForm({ ...credForm, currentPass: e.target.value })} placeholder="••••••" disabled={credBusy}
+              className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-[#f29696]/20 outline-none text-[#e8e9ef] text-[13.5px] focus:border-[#f29696]/40 transition disabled:opacity-50"/>
+          </div>
+        </div>
+
+        {credErr && <div className="text-[12.5px] text-[#f29696] bg-red-500/5 rounded-lg px-3 py-2 border border-red-500/15">{credErr}</div>}
+        {credSuccess && <div className="text-[12.5px] text-[#6ad08a] bg-green-500/5 rounded-lg px-3 py-2 border border-green-500/15">{credSuccess}</div>}
+
+        {tfaOn && (
+          <div className="text-[11.5px] text-[#e7b84b] bg-yellow-500/5 rounded-lg px-3 py-2 border border-yellow-500/15 flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0"/>
+            <span>{t("Changing password will disable 2FA. You will need to set it up again after the change.","পাসওয়ার্ড পরিবর্তন করলে 2FA নিষ্ক্রিয় হবে। পরিবর্তনের পর আবার সেটআপ করতে হবে।",lang)}</span>
+          </div>
+        )}
+
+        <button onClick={handleCredSubmit} disabled={credBusy || !credForm.currentPass}
+          className="px-6 h-[40px] rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13.8px] hover:brightness-110 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+          {credBusy && <span className="w-3.5 h-3.5 border-2 border-black/40 border-t-black rounded-full animate-spin"/>}
+          {t("Update Credentials","তথ্য আপডেট করুন",lang)}
+        </button>
       </div>
-      <div className="text-[11.5px] text-[#7e8391]">{t("Toggle 2FA switch to enable/disable two-factor authentication. When enabled, a 6-digit TOTP code will be required after login.","২এফএ টগল করে টু-ফ্যাক্টর অথেন্টিকেশন চালু/বন্ধ করুন। চালু থাকলে লগইনের পর ৬-ডিজিট TOTP কোড প্রয়োজন হবে।",lang)}</div>
     </div>
   )
 }
 
+
 function AdminCache({lang}:{lang:Lang}){
+  const [clearing, setClearing] = useState(false)
+  const handleClearCache = () => {
+    setClearing(true)
+    setTimeout(() => {
+      setClearing(false)
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith("portfolio_") || key.includes("cache"))) {
+          localStorage.removeItem(key)
+        }
+      }
+      alert(lang === "bn" ? "সকল ক্যাশ সফলভাবে মুছে ফেলা হয়েছে!" : "All cache cleared successfully!")
+    }, 800)
+  }
   return (
     <div className="space-y-5">
       <div className="text-[24px] font-[720]">{t("Cache Manager","ক্যাশ ম্যানেজার",lang)}</div>
@@ -1246,19 +1807,26 @@ function AdminCache({lang}:{lang:Lang}){
         <div>portfolio:public → HIT · 3m TTL</div>
         <div>rate:contact:IP → 1/5 used</div>
       </div>
-      <button className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] cursor-pointer hover:brightness-110 transition">{t("Clear All Cache","সব ক্যাশ পরিষ্কার",lang)}</button>
+      <button 
+        onClick={handleClearCache}
+        disabled={clearing}
+        className="px-5 h-10 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] cursor-pointer hover:brightness-110 transition disabled:opacity-50 flex items-center gap-1.5"
+      >
+        {clearing && <span className="w-3.5 h-3.5 border-2 border-black/40 border-t-black rounded-full animate-spin"/>}
+        {t("Clear All Cache","সব ক্যাশ পরিষ্কার",lang)}
+      </button>
     </div>
   )
 }
 function AdminLogin({lang}:{lang:Lang}){
-  const [email,setEmail]=useState("")
+  const [username,setUsername]=useState("")
   const [pass,setPass]=useState("")
   const [err,setErr]=useState("")
   const [busy,setBusy]=useState(false)
   const { login, isFirebaseConfigured: fbReady } = useAuth()
   const submit=async()=>{
     setErr(""); setBusy(true)
-    const result = await login(email.trim(), pass)
+    const result = await login(username.trim(), pass)
     setBusy(false)
     if(!result.success){ setErr(result.error || "Login failed") }
   }
@@ -1272,10 +1840,10 @@ function AdminLogin({lang}:{lang:Lang}){
           <div className={`text-[10.5px] px-2 py-[3px] rounded-full ${fbReady?"bg-[#3a5a2a]/40 text-[#8fcf6a] border border-[#5a8a3a]/30":"bg-[#3a3a2a]/40 text-[#d5c46a] border border-[#5a5a3a]/30"}`}>{authBadge}</div>
         </div>
         <div className="text-[24px] font-[720] mt-2">Admin Portal Login</div>
-        <div className="text-[11.5px] text-[#7e8391] mt-1">{fbReady ? t("Sign in with Firebase account","ফায়ারবেস অ্যাকাউন্ট দিয়ে লগইন", "en") : t("Demo: mm.xihab@gmail.com / Shihab@2026","ডেমো: mm.xihab@gmail.com / Shihab@2026", "en")}</div>
+        <div className="text-[11.5px] text-[#7e8391] mt-1">{fbReady ? t("Sign in with Firebase account","ফায়ারবেস অ্যাকাউন্ট দিয়ে লগইন", "en") : t("Demo: muntasir / Shihab@2026","ডেমো: muntasir / Shihab@2026", "en")}</div>
         <form onSubmit={e=>{e.preventDefault(); submit()}} className="mt-6 space-y-4">
-          <input required type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} placeholder="mm.xihab@gmail.com" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
-          <input required type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
+          <input required type="text" id="admin_username" name="admin_username" autoComplete="username" value={username} onChange={e=>{setUsername(e.target.value);setErr("")}} placeholder="Username" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
+          <input required type="password" id="admin_password" name="admin_password" autoComplete="current-password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} placeholder="Password" disabled={busy} className="w-full px-4 h-[46px] rounded-[12px] bg-black/25 border border-white/[0.12] outline-none focus:border-yellow-500/40 disabled:opacity-50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
           {err && <div className="text-[12.5px] text-[#f29696] bg-[#2a1414] border border-[#f29696]/20 rounded-[10px] px-3 py-2">{err}</div>}
           <button type="submit" disabled={busy} className="w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer hover:brightness-110 transition">{busy ? <span className="w-4 h-4 border-2 border-[#1a1410]/40 border-t-[#1a1410] rounded-full animate-spin"/> : null}{t("Login","লগইন",lang)}</button>
         </form>
@@ -1283,37 +1851,74 @@ function AdminLogin({lang}:{lang:Lang}){
     </div>
   )
 }
+
 function Admin2FA({onVerify}:{onVerify:()=>void}){
   const [code,setCode]=useState("")
   const [err,setErr]=useState("")
-  const DEMO_CODE="246810" // demo TOTP; replace with otplib verify when backend connected
-  const verify=()=>{
-    if(code===DEMO_CODE){ onVerify() }
-    else setErr("Invalid 2FA code. (Demo code: 246810)")
+  const [busy,setBusy]=useState(false)
+  const { admin_2fa } = useStore()
+  const verify=async()=>{
+    setBusy(true)
+    setErr("")
+    const encryptedSecret = admin_2fa?.encryptedSecret || ""
+    if(!encryptedSecret){
+      // fallback if somehow enabled but no secret exists (auto-bypass or verify always true)
+      setBusy(false)
+      onVerify()
+      return
+    }
+    const secret = decryptSecret(encryptedSecret, adminSecurity.PASSWORD)
+    const isValid = await verifyTOTP(secret, code)
+    setBusy(false)
+    if(isValid){
+      onVerify()
+    } else {
+      setErr("Invalid 2FA code. Please verify from Google Authenticator.")
+    }
   }
   return (
     <div className="min-h-screen bg-[#07070b] flex items-center justify-center px-5 cursor-default">
       <div className="w-full max-w-[420px] glass-strong rounded-[22px] p-[26px] text-center">
         <div className="w-14 h-14 mx-auto rounded-[16px] bg-[#14141f] gold-ring flex items-center justify-center"><Lock size={22} className="text-[#f1cf7a]"/></div>
         <div className="text-[22px] font-[700] mt-4">Two-Factor Authentication</div>
-        <div className="text-[13px] text-[#9da2af] mt-1">Enter 6-digit TOTP code (Demo: 246810)</div>
-        <input value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,""));setErr("")}} maxLength={6} placeholder="000000"
+        <div className="text-[13px] text-[#9da2af] mt-1">Enter the 6-digit code from Google Authenticator.</div>
+        <input value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,""));setErr("")}} maxLength={6} placeholder="000000" disabled={busy}
           className="mt-5 w-full text-center tracking-[0.42em] text-[26px] font-mono px-4 h-[56px] rounded-[14px] bg-black/30 border border-white/[0.14] outline-none focus:border-yellow-500/50 text-[#e8e9ef] caret-[#e7b84b] cursor-text"/>
         {err && <div className="text-[12.5px] text-[#f29696] mt-3">{err}</div>}
-        <button onClick={()=> code.length===6 && verify()} className="mt-4 w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650]">Verify & Enter</button>
+        <button onClick={()=> code.length===6 && !busy && verify()} disabled={code.length!==6 || busy} className="mt-4 w-full h-[46px] rounded-[12px] bg-[#e7b84b] text-[#1a1410] font-[650] cursor-pointer hover:brightness-110 transition flex items-center justify-center gap-2">
+          {busy ? <span className="w-4 h-4 border-2 border-[#1a1410]/40 border-t-[#1a1410] rounded-full animate-spin"/> : null}
+          Verify & Enter
+        </button>
       </div>
     </div>
   )
 }
+
 function AdminDash({lang}:{lang:Lang}){
   const { messages, cvCount, visibility } = useStore()
   const tfaOn = localStorage.getItem("rm_admin_2fa_enabled") === "1"
   return (
     <div className="space-y-6">
-      <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Dashboard","ড্যাশবোর্ড",lang)}</div>
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="relative overflow-hidden glass rounded-[20px] p-6 sm:p-8 mb-2">
+        <div className="absolute -top-16 -right-16 w-[200px] h-[200px] rounded-full opacity-30 blur-[60px]" style={{background:"radial-gradient(circle, #e7b84b, transparent)"}}/>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="text-[22px] md:text-[26px] font-[720] tracking-[-0.015em] text-white">
+              {t("Welcome back, ","স্বাগতম, ",lang)} <span className="gold-text">{profile.firstName}</span>!
+            </div>
+            <div className="text-[13px] text-[#9aa0ad] mt-1.5">
+              {t("Here's what's happening with your portfolio today.","আজ আপনার পোর্টফোলিওর সর্বশেষ অবস্থা এখানে দেওয়া হলো।",lang)}
+            </div>
+          </div>
+          <div className="flex gap-3">
+             <Link to="/admin/messages" className="shimmer-wrap px-4 py-2.5 rounded-full bg-[#e7b84b] text-[#15121a] font-[650] text-[12.5px] hover:brightness-[1.1] transition-all">{t("View Messages","মেসেজ দেখুন",lang)}</Link>
+             <Link to="/" target="_blank" className="px-4 py-2.5 rounded-full bg-white/[0.05] border border-white/[0.1] text-[#c5c9d5] hover:bg-white/[0.1] hover:text-white font-[600] text-[12.5px] transition-colors">{t("View Site","সাইট দেখুন",lang)}</Link>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[[t("Unread Messages","অপঠিত মেসেজ",lang),String(messages.filter(m=>!m.read).length)],[t("CV Downloads","CV ডাউনলোড",lang),String(cvCount)],[t("Total Messages","মোট মেসেজ",lang),String(messages.length)],[t("Projects","প্রজেক্ট",lang),String(projects.length)]].map(([k,v])=>(
-          <div key={k} className="glass rounded-[16px] px-5 py-4"><div className="text-[12px] text-[#a3a7b4]">{k}</div><div className="text-[27px] font-[730] gold-text mt-1">{v}</div></div>
+          <div key={k} className="glass rounded-[16px] px-4 sm:px-5 py-4"><div className="text-[11px] sm:text-[12px] text-[#a3a7b4] truncate" title={k}>{k}</div><div className="text-[24px] sm:text-[27px] font-[730] gold-text mt-1">{v}</div></div>
         ))}
       </div>
       <div className="grid lg:grid-cols-2 gap-5">
@@ -1361,7 +1966,7 @@ function AdminDash({lang}:{lang:Lang}){
             <span>{t("SOCIAL LINKS MANAGER","সোশ্যাল লিংক ম্যানেজার",lang)}</span>
             <span className="text-[10.5px] text-[#8a8f9c]">{profile.socials.filter(s=>s.enabled!==false && s.url).length}/{profile.socials.length} {t("active","সক্রিয়",lang)}</span>
           </div>
-          <div className="grid grid-cols-2 gap-[8px] text-[12px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-[8px] text-[12px]">
             {profile.socials.map(s=>{
               const active = s.enabled !== false && s.url && s.url.trim() !== ""
               return (

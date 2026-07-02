@@ -175,7 +175,9 @@ function ParticleNetwork({color="#e7b84b", density=55, linkDist=130, speed=0.45}
     let h = canvas.height = window.innerHeight
     const onR=()=>{ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight }
     window.addEventListener('resize', onR)
-    const n = Math.min(density, Math.round((w*h)/25000))
+    const isMobile = window.innerWidth < 768
+    const finalDensity = isMobile ? Math.min(15, density) : density
+    const n = Math.min(finalDensity, Math.round((w*h)/35000))
     const pts = Array.from({length:n}).map(()=>({
       x: Math.random()*w, y: Math.random()*h,
       vx: (Math.random()-.5)*speed, vy: (Math.random()-.5)*speed
@@ -229,7 +231,9 @@ function StarFieldCanvas(){
     let w=c.width=innerWidth, h=c.height=innerHeight
     const onR=()=>{ w=c.width=innerWidth; h=c.height=innerHeight }
     addEventListener('resize', onR)
-    const stars = Array.from({length:210}).map(()=>({
+    const isMobile = window.innerWidth < 768
+    const numStars = isMobile ? 65 : 210
+    const stars = Array.from({length:numStars}).map(()=>({
       x: Math.random()*w, y: Math.random()*h,
       r: Math.random()*1.35+.25,
       s: Math.random()*0.45+0.15,
@@ -257,14 +261,17 @@ function SpiralCanvas(){
     const onR=()=>{ w=c.width=innerWidth; h=c.height=innerHeight }
     addEventListener('resize', onR)
     let t=0, raf=0
+    const isMobile = window.innerWidth < 768
+    const numPoints = isMobile ? 120 : 310
+    const numArms = isMobile ? 2 : 3
     const draw=()=>{
       t+=0.011
       ctx.clearRect(0,0,w,h)
       ctx.save(); ctx.translate(w/2, h/2)
-      for(let arm=0; arm<3; arm++){
-        const armOffset = (Math.PI*2/3)*arm
+      for(let arm=0; arm<numArms; arm++){
+        const armOffset = (Math.PI*2/numArms)*arm
         ctx.beginPath()
-        for(let i=0;i<310;i++){
+        for(let i=0;i<numPoints;i++){
           const a = i*0.14 + armOffset + t*0.45
           const r = 10 + i*1.72
           const x = Math.cos(a)*r
@@ -292,6 +299,9 @@ function HelixCanvas(){
     const onR=()=>{ w=c.width=innerWidth; h=c.height=innerHeight }
     addEventListener('resize', onR)
     let t=0, raf=0
+    const isMobile = window.innerWidth < 768
+    const stepY = isMobile ? 16 : 6
+    const rungStepY = isMobile ? 48 : 28
     const draw=()=>{
       t+=0.019
       ctx.clearRect(0,0,w,h)
@@ -299,7 +309,7 @@ function HelixCanvas(){
       ctx.lineWidth=1.25
       for(let strand=0; strand<2; strand++){
         ctx.beginPath()
-        for(let y=-h/2; y<h/2; y+=6){
+        for(let y=-h/2; y<h/2; y+=stepY){
           const phase = y*0.017 + t + strand*Math.PI
           const x = Math.sin(phase)*78
           const px = cx + x
@@ -310,7 +320,7 @@ function HelixCanvas(){
         ctx.stroke()
       }
       // rungs
-      for(let y=-h/2; y<h/2; y+=28){
+      for(let y=-h/2; y<h/2; y+=rungStepY){
         const phase = y*0.017 + t
         const x1 = Math.sin(phase)*78
         const x2 = Math.sin(phase+Math.PI)*78
@@ -346,10 +356,12 @@ function AuroraCanvas(){
         grad.addColorStop(.5, `hsla(${275+i*16}, 64%, 58%, 0.07)`)
         grad.addColorStop(1, `hsla(${45+i*10}, 82%, 60%, 0.045)`)
         ctx.fillStyle=grad
+        const isMobile = window.innerWidth < 768
+        const stepX = isMobile ? 64 : 26
         ctx.beginPath()
         const base = h*0.32 + i*90
         ctx.moveTo(0, base)
-        for(let x=0;x<=w;x+=26){
+        for(let x=0;x<=w;x+=stepX){
           const y = Math.sin((x*0.004)+t+i)+Math.sin((x*0.007)-t*1.4+i*0.7)
           ctx.lineTo(x, base + y*37)
         }
@@ -370,7 +382,9 @@ function NeuralCanvas(){
     let w=c.width=innerWidth, h=c.height=innerHeight
     const onR=()=>{ w=c.width=innerWidth; h=c.height=innerHeight }
     addEventListener('resize', onR)
-    const nodes = Array.from({length:28}).map(()=>({
+    const isMobile = window.innerWidth < 768
+    const numNodes = isMobile ? 12 : 28
+    const nodes = Array.from({length:numNodes}).map(()=>({
       x: Math.random()*w, y: Math.random()*h,
       vx: (Math.random()-.5)*0.28, vy:(Math.random()-.5)*0.28
     }))

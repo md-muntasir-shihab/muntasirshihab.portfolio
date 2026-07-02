@@ -184,5 +184,45 @@ end;
 $$ language plpgsql security definer;
 
 -- ============================================================
+-- HELPER: mark message as read (security definer — callable by anon)
+-- ============================================================
+create or replace function public.mark_message_read(p_id uuid)
+returns void as $$
+begin
+  update public.messages set is_read = true where id = p_id;
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- HELPER: delete a message (security definer — callable by anon)
+-- ============================================================
+create or replace function public.delete_message(p_id uuid)
+returns void as $$
+begin
+  delete from public.messages where id = p_id;
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- HELPER: reset all portfolio content (security definer)
+-- ============================================================
+create or replace function public.reset_portfolio_content()
+returns void as $$
+begin
+  delete from public.portfolio_content where key != '';
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- HELPER: read all messages (security definer — callable by anon)
+-- ============================================================
+create or replace function public.read_all_messages()
+returns setof public.messages as $$
+begin
+  return query select * from public.messages order by created_at desc;
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
 -- DONE — Schema ready
 -- ============================================================

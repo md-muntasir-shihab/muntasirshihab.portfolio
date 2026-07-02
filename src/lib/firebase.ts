@@ -9,7 +9,12 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  updateEmail as firebaseUpdateEmail,
+  updatePassword as firebaseUpdatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   type User,
+  type UserCredential,
 } from "firebase/auth"
 import {
   getFirestore,
@@ -56,6 +61,28 @@ export async function firebaseLogout(): Promise<void> {
 
 export function onFirebaseAuthChange(callback: (user: User | null) => void): () => void {
   return onAuthStateChanged(auth, callback)
+}
+
+/** Re-authenticate current user with current password (required before update) */
+export async function reauthenticateUser(currentPassword: string): Promise<UserCredential> {
+  const user = auth.currentUser
+  if (!user || !user.email) throw new Error("No authenticated user")
+  const credential = EmailAuthProvider.credential(user.email, currentPassword)
+  return reauthenticateWithCredential(user, credential)
+}
+
+/** Update email of the currently signed-in Firebase user */
+export async function updateUserEmail(newEmail: string): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error("No authenticated user")
+  await firebaseUpdateEmail(user, newEmail)
+}
+
+/** Update password of the currently signed-in Firebase user */
+export async function updateUserPassword(newPassword: string): Promise<void> {
+  const user = auth.currentUser
+  if (!user) throw new Error("No authenticated user")
+  await firebaseUpdatePassword(user, newPassword)
 }
 
 export default app

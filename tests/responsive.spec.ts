@@ -91,10 +91,11 @@ test.describe('Mobile Responsiveness — Admin Panel Mobile', () => {
     const adminSlug = process.env.ADMIN_SLUG || 'xk9-admin-portal-2025';
     await page.setViewportSize({ width: 375, height: 667 });
 
-    // Set auth in sessionStorage
+    // Set auth and 2FA bypass in sessionStorage
     await page.goto('/');
     await page.evaluate(() => {
       sessionStorage.setItem('rm_admin_authed', '1');
+      sessionStorage.setItem('rm_admin_2fa', '1');
     });
 
     await page.goto(`/${adminSlug}`);

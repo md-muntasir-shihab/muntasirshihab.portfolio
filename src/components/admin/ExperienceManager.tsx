@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
 import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
@@ -6,11 +6,13 @@ import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
 interface ExpItem {
-  role: { en: string; bn: string }
+  id: string
   company: string
+  role: { en: string; bn: string }
   period: string
-  desc: { en: string; bn: string }
+  location: string
   bullets: { en: string[]; bn: string[] }
+  tags: string[]
 }
 
 export default function ExperienceManager({ lang }: { lang: Lang }) {
@@ -18,11 +20,13 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [currentItem, setCurrentItem] = useState<ExpItem>({
-    role: { en: "", bn: "" },
+    id: "",
     company: "",
+    role: { en: "", bn: "" },
     period: "",
-    desc: { en: "", bn: "" },
+    location: "",
     bullets: { en: [], bn: [] },
+    tags: [],
   })
 
   const [newBulletEn, setNewBulletEn] = useState("")
@@ -38,11 +42,13 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
     setEditingIdx(-1)
     setIsNew(true)
     setCurrentItem({
-      role: { en: "", bn: "" },
+      id: "e" + Date.now(),
       company: "",
+      role: { en: "", bn: "" },
       period: "",
-      desc: { en: "", bn: "" },
+      location: "",
       bullets: { en: [], bn: [] },
+      tags: [],
     })
     setNewBulletEn("")
     setNewBulletBn("")
@@ -50,7 +56,7 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
 
   const handleSaveItem = async () => {
     if (!currentItem.company.trim() || !currentItem.role.en.trim()) {
-      alert(t("Company and English Role are required!", "কোম্পানি এবং ইংরেজি রোল পূরণ করা আবশ্যক!", lang))
+      alert(t("Company and English Role are required!", "কোম্পানি এবং ইংরেজি পদবী পূরণ করা আবশ্যক!", lang))
       return
     }
 
@@ -108,10 +114,11 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Work Experience", "কাজের অভিজ্ঞতা", lang)}</div>
+        <h2 className="text-[26px] font-[720] tracking-[-0.015em]">{t("Work Experience", "কাজের অভিজ্ঞতা", lang)}</h2>
         {editingIdx === null && (
           <button
             onClick={handleStartAdd}
+            aria-label={t("Add New Work Experience", "নতুন কাজের অভিজ্ঞতা যোগ করুন", lang)}
             className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] flex items-center gap-1 cursor-pointer transition hover:brightness-110"
           >
             <Plus size={15} /> {t("Add New", "নতুন যোগ", lang)}
@@ -128,60 +135,64 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Company Name", "কোম্পানির নাম", lang)}</label>
+              <label htmlFor="exp-company" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Company Name", "কোম্পানির নাম", lang)}</label>
               <input
+                id="exp-company"
                 value={currentItem.company}
                 onChange={(e) => setCurrentItem({ ...currentItem, company: e.target.value })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Period (e.g. Feb 2024 — Present)", "সময়কাল", lang)}</label>
+              <label htmlFor="exp-period" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Period (e.g. Feb 2024 — Present)", "সময়কাল", lang)}</label>
               <input
+                id="exp-period"
                 value={currentItem.period}
                 onChange={(e) => setCurrentItem({ ...currentItem, period: e.target.value })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Role Title (English)", "রোল / পদবী (ইংরেজি)", lang)}</label>
+              <label htmlFor="exp-role-en" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Role Title (English)", "রোল / পদবী (ইংরেজি)", lang)}</label>
               <input
+                id="exp-role-en"
                 value={currentItem.role.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, role: { ...currentItem.role, en: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Role Title (Bangla)", "রোল / পদবী (বাংলা)", lang)}</label>
+              <label htmlFor="exp-role-bn" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Role Title (Bangla)", "রোল / পদবী (বাংলা)", lang)}</label>
               <input
+                id="exp-role-bn"
                 value={currentItem.role.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, role: { ...currentItem.role, bn: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Short Description (English)", "ছোট বিবরণ (ইংরেজি)", lang)}</label>
-              <textarea
-                value={currentItem.desc.en}
-                onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, en: e.target.value } })}
-                rows={2}
-                className="w-full mt-[6px] p-3 rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
+            <div>
+              <label htmlFor="exp-location" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Location (e.g. Panchagarh • On-site)", "লোকেশন (যেমন: পঞ্চগড় • অন-সাইট)", lang)}</label>
+              <input
+                id="exp-location"
+                value={currentItem.location}
+                onChange={(e) => setCurrentItem({ ...currentItem, location: e.target.value })}
+                className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Short Description (Bangla)", "ছোট বিবরণ (বাংলা)", lang)}</label>
-              <textarea
-                value={currentItem.desc.bn}
-                onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, bn: e.target.value } })}
-                rows={2}
-                className="w-full mt-[6px] p-3 rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
+            <div>
+              <label htmlFor="exp-tags" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Tags (comma separated, e.g. Management, Leadership)", "ট্যাগ সমূহ (কমা দিয়ে আলাদা করুন)", lang)}</label>
+              <input
+                id="exp-tags"
+                value={currentItem.tags.join(", ")}
+                onChange={(e) => setCurrentItem({ ...currentItem, tags: e.target.value.split(",").map(t => t.trim()).filter(Boolean) })}
+                className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
           </div>
 
           {/* Bullets Sub-Editor */}
           <div className="border-t border-white/[0.08] pt-4">
-            <label className="text-[13px] font-[650] text-[#e8e9ef]">{t("Key Achievements / Duties", "মূল দায়িত্ব ও অর্জনসমূহ", lang)}</label>
+            <h3 className="text-[13px] font-[650] text-[#e8e9ef]">{t("Key Achievements / Duties", "মূল দায়িত্ব ও অর্জনসমূহ", lang)}</h3>
             
             <div className="space-y-2 mt-3">
               {currentItem.bullets.en.map((bullet, idx) => (
@@ -192,7 +203,8 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
                   </div>
                   <button
                     onClick={() => removeBullet(idx)}
-                    className="p-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400"
+                    aria-label={t("Delete Bullet", "অর্জন মুছুন", lang)}
+                    className="p-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 cursor-pointer"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -202,8 +214,9 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
 
             <div className="grid md:grid-cols-2 gap-3 mt-3 items-end">
               <div>
-                <label className="text-[11px] text-[#9aa0ad]">{t("Add Bullet Achievement (English)", "অর্জন যোগ করুন (ইংরেজি)", lang)}</label>
+                <label htmlFor="exp-bullet-en" className="text-[11px] text-[#9aa0ad]">{t("Add Bullet Achievement (English)", "অর্জন যোগ করুন (ইংরেজি)", lang)}</label>
                 <input
+                  id="exp-bullet-en"
                   value={newBulletEn}
                   onChange={(e) => setNewBulletEn(e.target.value)}
                   className="w-full mt-[4px] px-3 h-[36px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13px]"
@@ -211,8 +224,9 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="text-[11px] text-[#9aa0ad]">{t("Add Bullet Achievement (Bangla)", "অর্জন যোগ করুন (বাংলা)", lang)}</label>
+                  <label htmlFor="exp-bullet-bn" className="text-[11px] text-[#9aa0ad]">{t("Add Bullet Achievement (Bangla)", "অর্জন যোগ করুন (বাংলা)", lang)}</label>
                   <input
+                    id="exp-bullet-bn"
                     value={newBulletBn}
                     onChange={(e) => setNewBulletBn(e.target.value)}
                     className="w-full mt-[4px] px-3 h-[36px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13px]"
@@ -271,6 +285,7 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleStartEdit(idx)}
+                    aria-label={`${t("Edit", "এডিট", lang)}: ${exp.role[lang]}`}
                     className="px-3 py-[5px] rounded-full glass hover:bg-white/[0.06] text-[12px] font-[550] flex items-center gap-1 cursor-pointer transition text-[#e7c879]"
                   >
                     <Edit2 size={12} /> {t("Edit", "এডিট", lang)}
@@ -278,6 +293,7 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "up")}
                     disabled={idx === 0}
+                    aria-label={t("Move Up", "উপরে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowUp size={13} />
@@ -285,12 +301,14 @@ export default function ExperienceManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "down")}
                     disabled={idx === experience.length - 1}
+                    aria-label={t("Move Down", "নিচে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowDown size={13} />
                   </button>
                   <button
                     onClick={() => handleDeleteItem(idx)}
+                    aria-label={`${t("Delete", "মুছুন", lang)}: ${exp.role[lang]}`}
                     className="px-3 py-[5px] rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-[12px] font-[550] text-red-400 cursor-pointer transition"
                   >
                     <Trash2 size={12} /> {t("Delete", "মুছুন", lang)}

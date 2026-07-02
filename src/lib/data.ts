@@ -3,6 +3,43 @@
 
 export type Lang = 'bn' | 'en'
 
+export interface Project {
+  id: string
+  title: { en: string; bn: string }
+  blurb: { en: string; bn: string }
+  desc?: { en: string; bn: string }
+  year: string
+  tags: string[]
+  img?: string
+  link?: string
+  github?: string
+  featured: boolean
+}
+
+export interface BlogPost {
+  slug: string
+  title: { en: string; bn: string }
+  excerpt: { en: string; bn: string }
+  content?: { en: string; bn: string }
+  date: string
+  read: string
+  tags: string[]
+  image?: string
+}
+
+export interface Recommendation {
+  name: string
+  designation: string
+  company: string
+  relationship: { en: string; bn: string }
+  text: { en: string; bn: string }
+  date: string
+  category: string
+  rating: number
+  linkedin: string
+  avatar?: string
+}
+
 export const profile = {
   name: { en: "MD MUNTASIR SHIHAB", bn: "মোঃ মুনতাসির শিহাব" },
   firstName: "MD MUNTASIR",
@@ -74,23 +111,26 @@ export const profile = {
     { label: { en: "Volunteers Managed", bn: "স্বেচ্ছাসেবক পরিচালনা" }, value: 50 },
   ],
   socials: [
-    { name: "WhatsApp", handle: "WhatsApp", url: "https://wa.me/8801317138570", color: "#25d366", enabled: true, customLogo: "" },
-    { name: "Telegram", handle: "@muntasir", url: "https://t.me/muntasir", color: "#26A5E4", enabled: true, customLogo: "" },
-    { name: "LinkedIn", handle: "muntasir-shihab", url: "https://linkedin.com", color: "#0A66C2", enabled: true, customLogo: "" },
-    { name: "GitHub", handle: "@muntasir-shihab", url: "https://github.com", color: "#ffffff", enabled: true, customLogo: "" },
-    { name: "Facebook", handle: "muntasir.shihab", url: "https://facebook.com", color: "#1877F2", enabled: true, customLogo: "" },
-    { name: "Instagram", handle: "@muntasir.shihab", url: "https://instagram.com", color: "#E4405F", enabled: true, customLogo: "" },
-    { name: "X", handle: "@muntasir", url: "https://x.com", color: "#ffffff", enabled: true, customLogo: "" },
-    { name: "Threads", handle: "@muntasir", url: "https://threads.net", color: "#ffffff", enabled: true, customLogo: "" },
-    { name: "YouTube", handle: "YouTube", url: "https://youtube.com", color: "#FF0000", enabled: true, customLogo: "" },
-    { name: "Pinterest", handle: "Pinterest", url: "https://pinterest.com", color: "#E60023", enabled: true, customLogo: "" },
-    { name: "Behance", handle: "Behance", url: "https://behance.net", color: "#1769FF", enabled: true, customLogo: "" },
-    { name: "Dribbble", handle: "Dribbble", url: "https://dribbble.com", color: "#EA4C89", enabled: true, customLogo: "" },
-    { name: "Reddit", handle: "Reddit", url: "https://reddit.com", color: "#FF4500", enabled: true, customLogo: "" },
-    { name: "Upwork", handle: "Upwork", url: "https://upwork.com", color: "#14A800", enabled: true, customLogo: "" },
-    { name: "Fiverr", handle: "Fiverr", url: "https://fiverr.com", color: "#1DBF73", enabled: true, customLogo: "" },
-    { name: "Freelancer", handle: "Freelancer", url: "https://freelancer.com", color: "#29B2FE", enabled: true, customLogo: "" },
-    { name: "Toptal", handle: "Toptal", url: "https://toptal.com", color: "#3863A0", enabled: true, customLogo: "" },
+    // ---- Social ----
+    { name: "WhatsApp", handle: "WhatsApp", url: "https://wa.me/8801317138570", color: "#25d366", enabled: true, customLogo: "", category: "social" },
+    { name: "Telegram", handle: "@muntasir", url: "https://t.me/muntasir", color: "#26A5E4", enabled: true, customLogo: "", category: "social" },
+    { name: "Facebook", handle: "muntasir.shihab", url: "https://facebook.com", color: "#1877F2", enabled: true, customLogo: "", category: "social" },
+    { name: "Instagram", handle: "@muntasir.shihab", url: "https://instagram.com", color: "#E4405F", enabled: true, customLogo: "", category: "social" },
+    { name: "X", handle: "@muntasir", url: "https://x.com", color: "#ffffff", enabled: true, customLogo: "", category: "social" },
+    { name: "Threads", handle: "@muntasir", url: "https://threads.net", color: "#ffffff", enabled: true, customLogo: "", category: "social" },
+    { name: "YouTube", handle: "YouTube", url: "https://youtube.com", color: "#FF0000", enabled: true, customLogo: "", category: "social" },
+    { name: "Reddit", handle: "Reddit", url: "https://reddit.com", color: "#FF4500", enabled: true, customLogo: "", category: "social" },
+    // ---- Professional ----
+    { name: "LinkedIn", handle: "muntasir-shihab", url: "https://linkedin.com", color: "#0A66C2", enabled: true, customLogo: "", category: "professional" },
+    { name: "GitHub", handle: "@muntasir-shihab", url: "https://github.com", color: "#ffffff", enabled: true, customLogo: "", category: "professional" },
+    { name: "Upwork", handle: "Upwork", url: "https://upwork.com", color: "#14A800", enabled: true, customLogo: "", category: "professional" },
+    { name: "Fiverr", handle: "Fiverr", url: "https://fiverr.com", color: "#1DBF73", enabled: true, customLogo: "", category: "professional" },
+    { name: "Freelancer", handle: "Freelancer", url: "https://freelancer.com", color: "#29B2FE", enabled: true, customLogo: "", category: "professional" },
+    { name: "Toptal", handle: "Toptal", url: "https://toptal.com", color: "#3863A0", enabled: true, customLogo: "", category: "professional" },
+    // ---- Design / Creative ----
+    { name: "Pinterest", handle: "Pinterest", url: "https://pinterest.com", color: "#E60023", enabled: true, customLogo: "", category: "design" },
+    { name: "Behance", handle: "Behance", url: "https://behance.net", color: "#1769FF", enabled: true, customLogo: "", category: "design" },
+    { name: "Dribbble", handle: "Dribbble", url: "https://dribbble.com", color: "#EA4C89", enabled: true, customLogo: "", category: "design" },
   ]
 }
 
@@ -175,7 +215,7 @@ export const tools = [
   "Adobe Illustrator", "Adobe Photoshop", "Canva", "Figma", "HTML5", "CSS3", "Microsoft Office", "Google Workspace", "Digital Marketing", "AI Tools"
 ]
 
-export const projects = []
+export const projects: Project[] = []
 
 export const githubStats = {
   contributions: 120,
@@ -190,7 +230,7 @@ export const githubStats = {
   ]
 }
 
-export const blogPosts = []
+export const blogPosts: BlogPost[] = []
 
 export const testimonials = [
   {
@@ -204,7 +244,7 @@ export const testimonials = [
   }
 ]
 
-export const recommendations = [
+export const recommendations: Recommendation[] = [
   {
     name: "Executive Committee",
     designation: "Central Board",
@@ -249,7 +289,13 @@ export const hireMe = {
   stack: ["Graphic Design","Branding","HTML/CSS","Statistics","AI Tools"],
   calendly: "",
   whatsapp: "+8801317138570",
-  salary: { show: false, range: "Negotiable" }
+  salary: { show: false, range: "Negotiable" },
+  visitorEmailEnabled: true,
+  adminEmailEnabled: true,
+  cvEmailEnabled: true,
+  resendApiKey: "",
+  emailFrom: "",
+  emailTo: "",
 }
 
 export const achievements = [
@@ -258,7 +304,7 @@ export const achievements = [
   { en: "HSC GPA 4.92 — Science (Makbular Rahman Govt College)", bn: "এইচএসসি জিপিএ ৪.৯২ — বিজ্ঞান (মকবুলার রহমান সরকারি কলেজ)" },
 ]
 
-export const pageBackgroundMap = {
+export const pageBackgroundMap: Record<string, string> = {
   "/": "beamsGold",
   "/about": "floatingSpot",
   "/experience": "dnaHelix",
@@ -271,7 +317,7 @@ export const pageBackgroundMap = {
   "/hire-me": "neonSpot",
   "/contact": "neuralWavy",
   "/cv": "particleGrid"
-} as const
+}
 
 // CMS Control System
 export const sectionVisibility = {

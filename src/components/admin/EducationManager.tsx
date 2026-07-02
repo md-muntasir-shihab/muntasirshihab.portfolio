@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
 import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
@@ -6,10 +6,10 @@ import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
 interface EduItem {
+  school: string
   degree: { en: string; bn: string }
-  school: { en: string; bn: string }
   period: string
-  desc: { en: string; bn: string }
+  note: { en: string; bn: string }
 }
 
 export default function EducationManager({ lang }: { lang: Lang }) {
@@ -17,10 +17,10 @@ export default function EducationManager({ lang }: { lang: Lang }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [currentItem, setCurrentItem] = useState<EduItem>({
+    school: "",
     degree: { en: "", bn: "" },
-    school: { en: "", bn: "" },
     period: "",
-    desc: { en: "", bn: "" },
+    note: { en: "", bn: "" },
   })
 
   const handleStartEdit = (index: number) => {
@@ -33,15 +33,15 @@ export default function EducationManager({ lang }: { lang: Lang }) {
     setEditingIdx(-1)
     setIsNew(true)
     setCurrentItem({
+      school: "",
       degree: { en: "", bn: "" },
-      school: { en: "", bn: "" },
       period: "",
-      desc: { en: "", bn: "" },
+      note: { en: "", bn: "" },
     })
   }
 
   const handleSaveItem = async () => {
-    if (!currentItem.degree.en.trim() || !currentItem.school.en.trim()) {
+    if (!currentItem.degree.en.trim() || !currentItem.school.trim()) {
       alert(t("Degree and School are required!", "ডিগ্রি এবং শিক্ষা প্রতিষ্ঠান পূরণ করা আবশ্যক!", lang))
       return
     }
@@ -77,10 +77,11 @@ export default function EducationManager({ lang }: { lang: Lang }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Education & Qualifications", "শিক্ষা ও যোগ্যতা", lang)}</div>
+        <h2 className="text-[26px] font-[720] tracking-[-0.015em]">{t("Education & Qualifications", "শিক্ষা ও যোগ্যতা", lang)}</h2>
         {editingIdx === null && (
           <button
             onClick={handleStartAdd}
+            aria-label={t("Add New Education Entry", "নতুন শিক্ষার বিবরণ যোগ করুন", lang)}
             className="px-4 h-9 rounded-full bg-[#e7b84b] text-[#1a1410] font-[650] text-[13px] flex items-center gap-1 cursor-pointer transition hover:brightness-110"
           >
             <Plus size={15} /> {t("Add New", "নতুন যোগ", lang)}
@@ -97,59 +98,57 @@ export default function EducationManager({ lang }: { lang: Lang }) {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Degree Title (English)", "ডিগ্রী (ইংরেজি)", lang)}</label>
+              <label htmlFor="edu-degree-en" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Degree Title (English)", "ডিগ্রী (ইংরেজি)", lang)}</label>
               <input
+                id="edu-degree-en"
                 value={currentItem.degree.en}
                 onChange={(e) => setCurrentItem({ ...currentItem, degree: { ...currentItem.degree, en: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Degree Title (Bangla)", "ডিগ্রী (বাংলা)", lang)}</label>
+              <label htmlFor="edu-degree-bn" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Degree Title (Bangla)", "ডিগ্রী (বাংলা)", lang)}</label>
               <input
+                id="edu-degree-bn"
                 value={currentItem.degree.bn}
                 onChange={(e) => setCurrentItem({ ...currentItem, degree: { ...currentItem.degree, bn: e.target.value } })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
-            <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Institution Name (English)", "প্রতিষ্ঠান (ইংরেজি)", lang)}</label>
+            <div className="md:col-span-2">
+              <label htmlFor="edu-school" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Institution Name", "শিক্ষা প্রতিষ্ঠানের নাম", lang)}</label>
               <input
-                value={currentItem.school.en}
-                onChange={(e) => setCurrentItem({ ...currentItem, school: { ...currentItem.school, en: e.target.value } })}
-                className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
-              />
-            </div>
-            <div>
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Institution Name (Bangla)", "প্রতিষ্ঠান (বাংলা)", lang)}</label>
-              <input
-                value={currentItem.school.bn}
-                onChange={(e) => setCurrentItem({ ...currentItem, school: { ...currentItem.school, bn: e.target.value } })}
+                id="edu-school"
+                value={currentItem.school}
+                onChange={(e) => setCurrentItem({ ...currentItem, school: e.target.value })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Period (e.g. 2023 — Present)", "সময়কাল", lang)}</label>
+              <label htmlFor="edu-period" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Period (e.g. 2023 — Present)", "সময়কাল", lang)}</label>
               <input
+                id="edu-period"
                 value={currentItem.period}
                 onChange={(e) => setCurrentItem({ ...currentItem, period: e.target.value })}
                 className="w-full mt-[6px] px-3 h-[40px] rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (English)", "বিবরণ (ইংরেজি)", lang)}</label>
+              <label htmlFor="edu-note-en" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Note (English)", "টীকা/তথ্য (ইংরেজি)", lang)}</label>
               <textarea
-                value={currentItem.desc.en}
-                onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, en: e.target.value } })}
+                id="edu-note-en"
+                value={currentItem.note.en}
+                onChange={(e) => setCurrentItem({ ...currentItem, note: { ...currentItem.note, en: e.target.value } })}
                 rows={3}
                 className="w-full mt-[6px] p-3 rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[12px] text-[#9aa0ad] font-[600]">{t("Description (Bangla)", "বিবরণ (বাংলা)", lang)}</label>
+              <label htmlFor="edu-note-bn" className="text-[12px] text-[#9aa0ad] font-[600]">{t("Note (Bangla)", "টীকা/তথ্য (বাংলা)", lang)}</label>
               <textarea
-                value={currentItem.desc.bn}
-                onChange={(e) => setCurrentItem({ ...currentItem, desc: { ...currentItem.desc, bn: e.target.value } })}
+                id="edu-note-bn"
+                value={currentItem.note.bn}
+                onChange={(e) => setCurrentItem({ ...currentItem, note: { ...currentItem.note, bn: e.target.value } })}
                 rows={3}
                 className="w-full mt-[6px] p-3 rounded-[9px] bg-black/25 border border-white/[0.12] outline-none text-[#e8e9ef] text-[13.5px]"
               />
@@ -190,7 +189,7 @@ export default function EducationManager({ lang }: { lang: Lang }) {
               >
                 <div>
                   <div className="font-[650] text-[14.5px] text-[#e8e9ef]">
-                    {edu.degree[lang]} <span className="text-[#9aa0ad] font-[400]">at</span> {edu.school[lang]}
+                    {edu.degree[lang]} <span className="text-[#9aa0ad] font-[400]">at</span> {edu.school}
                   </div>
                   <div className="text-[12px] text-[#7e8391] mt-[3px]">{edu.period}</div>
                 </div>
@@ -198,6 +197,7 @@ export default function EducationManager({ lang }: { lang: Lang }) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleStartEdit(idx)}
+                    aria-label={`${t("Edit", "এডিট", lang)}: ${edu.degree[lang]}`}
                     className="px-3 py-[5px] rounded-full glass hover:bg-white/[0.06] text-[12px] font-[550] flex items-center gap-1 cursor-pointer transition text-[#e7c879]"
                   >
                     <Edit2 size={12} /> {t("Edit", "এডিট", lang)}
@@ -205,6 +205,7 @@ export default function EducationManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "up")}
                     disabled={idx === 0}
+                    aria-label={t("Move Up", "উপরে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowUp size={13} />
@@ -212,12 +213,14 @@ export default function EducationManager({ lang }: { lang: Lang }) {
                   <button
                     onClick={() => handleMove(idx, "down")}
                     disabled={idx === education.length - 1}
+                    aria-label={t("Move Down", "নিচে সরান", lang)}
                     className="w-8 h-8 rounded-full bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 flex items-center justify-center text-[#e8e9ef]"
                   >
                     <ArrowDown size={13} />
                   </button>
                   <button
                     onClick={() => handleDeleteItem(idx)}
+                    aria-label={`${t("Delete", "মুছুন", lang)}: ${edu.degree[lang]}`}
                     className="px-3 py-[5px] rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-[12px] font-[550] text-red-400 cursor-pointer transition"
                   >
                     <Trash2 size={12} /> {t("Delete", "মুছুন", lang)}

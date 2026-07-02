@@ -1,7 +1,7 @@
-import React, { useState } from "react"
+import { useState } from "react"
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
-import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Check, X } from "lucide-react"
+import { Plus, Trash2, ArrowUp, ArrowDown, Edit2 } from "lucide-react"
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
@@ -118,6 +118,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                 <div>
                   <label className="text-[12px] text-[#9aa0ad]">{t("Skill Name", "দক্ষতার নাম", lang)}</label>
                   <input
+                    title={t("Skill Name", "দক্ষতার নাম", lang)}
                     value={currentItem.name}
                     onChange={(e) => setCurrentItem({ ...currentItem, name: e.target.value })}
                     className="w-full mt-[5px] px-3 h-[38px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13.5px]"
@@ -126,6 +127,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                 <div>
                   <label className="text-[12px] text-[#9aa0ad]">{t("Skill Category", "ক্যাটাগরি", lang)}</label>
                   <select
+                    title={t("Skill Category", "ক্যাটাগরি", lang)}
                     value={currentItem.cat}
                     onChange={(e) => setCurrentItem({ ...currentItem, cat: e.target.value })}
                     className="w-full mt-[5px] px-3 h-[38px] rounded-[8px] bg-[#1a1a24] border border-white/[0.1] text-[13.5px] text-[#e8e9ef] outline-none"
@@ -142,6 +144,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                   </label>
                   <input
                     type="range"
+                    title={t("Proficiency Level", "দক্ষতা মাত্রা", lang)}
                     min="0"
                     max="100"
                     value={currentItem.level}
@@ -188,6 +191,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                       <span className="text-[12px] text-yellow-500 font-mono mr-2">{sk.level}%</span>
                       <button
                         onClick={() => handleStartEdit(idx)}
+                        title={t("Edit Skill", "দক্ষতা সংশোধন", lang)}
                         className="p-1.5 rounded-full hover:bg-white/5 text-[#e7c879]"
                       >
                         <Edit2 size={12} />
@@ -195,6 +199,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                       <button
                         onClick={() => handleMove(idx, "up")}
                         disabled={idx === 0}
+                        title={t("Move Up", "উপরে সরান", lang)}
                         className="p-1 rounded bg-white/[0.02] disabled:opacity-30"
                       >
                         <ArrowUp size={12} />
@@ -202,12 +207,14 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                       <button
                         onClick={() => handleMove(idx, "down")}
                         disabled={idx === skills.length - 1}
+                        title={t("Move Down", "নিচে সরান", lang)}
                         className="p-1 rounded bg-white/[0.02] disabled:opacity-30"
                       >
                         <ArrowDown size={12} />
                       </button>
                       <button
                         onClick={() => handleDeleteItem(idx)}
+                        title={t("Delete Skill", "দক্ষতা মুছুন", lang)}
                         className="p-1.5 rounded-full hover:bg-red-500/10 text-red-400"
                       >
                         <Trash2 size={12} />
@@ -231,6 +238,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
               <input
                 value={newTool}
                 onChange={(e) => setNewTool(e.target.value)}
+                title={t("Add new tool or technology", "নতুন টুল বা টেকনোলজি যোগ করুন", lang)}
                 placeholder={t("Add tool (e.g. Docker)", "টুল যোগ করুন (যেমন Docker)", lang)}
                 className="flex-1 px-3 h-[38px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13.5px] outline-none"
               />
@@ -255,6 +263,7 @@ export default function SkillsManager({ lang }: { lang: Lang }) {
                     <button
                       type="button"
                       onClick={() => handleRemoveTool(tool)}
+                      title={t("Remove Tool", "টুল সরান", lang)}
                       className="text-red-400 hover:text-red-300 ml-1 font-[700] text-[11px]"
                     >
                       ✕

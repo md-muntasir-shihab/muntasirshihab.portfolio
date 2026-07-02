@@ -1,4 +1,4 @@
-import React from "react"
+
 import { useStore } from "../../lib/store"
 import { type Lang } from "../../lib/data"
 
@@ -8,9 +8,7 @@ export default function SectionsManager({ lang }: { lang: Lang }) {
   const { visibility, setVisibility } = useStore()
 
   const sectionsList: { key: keyof typeof visibility; label: string; bnLabel: string }[] = [
-    { key: "about", label: "About Me", bnLabel: "আমার সম্পর্কে" },
     { key: "experience", label: "Work Experience", bnLabel: "কাজের অভিজ্ঞতা" },
-    { key: "education", label: "Education", bnLabel: "শিক্ষা যোগ্যতা" },
     { key: "skills", label: "Skills & Technologies", bnLabel: "দক্ষতা ও প্রযুক্তি" },
     { key: "services", label: "Services I Offer", bnLabel: "আমার সার্ভিসসমূহ" },
     { key: "projects", label: "Projects Portfolio", bnLabel: "প্রজেক্ট পোর্টফোলিও" },
@@ -18,8 +16,6 @@ export default function SectionsManager({ lang }: { lang: Lang }) {
     { key: "testimonials", label: "Client Testimonials", bnLabel: "ক্লায়েন্ট ফিডব্যাক" },
     { key: "recommendations", label: "Peer Recommendations", bnLabel: "সহকর্মী সুপারিশ" },
     { key: "achievements", label: "Achievements & Awards", bnLabel: "সাফল্য ও পুরস্কার" },
-    { key: "hireMe", label: "Hire Me Card", bnLabel: "হায়ার মি কার্ড" },
-    { key: "contact", label: "Contact Form & Details", bnLabel: "যোগাযোগ ফরম" },
   ]
 
   const toggleSection = async (key: keyof typeof visibility) => {
@@ -29,7 +25,7 @@ export default function SectionsManager({ lang }: { lang: Lang }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-[26px] font-[720] tracking-[-0.015em]">{t("Homepage Sections", "হোমপেজ সেকশনসমূহ", lang)}</div>
+        <h2 className="text-[26px] font-[720] tracking-[-0.015em]">{t("Homepage Sections", "হোমপেজ সেকশনসমূহ", lang)}</h2>
         <p className="text-[13.5px] text-[#7e8391] mt-1.5">
           {t(
             "Toggle visibility of each main section on the public landing page.",
@@ -47,11 +43,13 @@ export default function SectionsManager({ lang }: { lang: Lang }) {
               key={sec.key}
               className="flex items-center justify-between p-3.5 rounded-[12px] bg-white/[0.015] border border-white/[0.04] hover:bg-white/[0.03] transition"
             >
+              <span className="hidden">{sec.key}</span>
               <div className="font-[600] text-[13.8px] text-[#e8e9ef]">{t(sec.label, sec.bnLabel, lang)}</div>
               <button
                 onClick={() => toggleSection(sec.key)}
+                aria-label={`${t("Toggle section", "সেকশন টগল করুন", lang)}: ${t(sec.label, sec.bnLabel, lang)}`}
                 className={`w-[60px] h-[30px] rounded-full p-1 transition-colors duration-250 cursor-pointer ${
-                  isEnabled ? "bg-yellow-500" : "bg-white/10"
+                  isEnabled ? "bg-[#5bd07a]" : "bg-white bg-white/10"
                 }`}
               >
                 <div

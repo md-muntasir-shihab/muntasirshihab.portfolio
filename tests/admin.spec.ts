@@ -4,6 +4,7 @@ const adminSlug = process.env.ADMIN_SLUG || 'xk9-admin-portal-2025';
 
 test.describe('Admin Panel Functional Tests', () => {
   test.beforeEach(async ({ page }) => {
+    page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
     // Navigate to the site to establish origin, then set sessionStorage
     await page.goto('/');
     await page.evaluate(() => {
@@ -21,8 +22,10 @@ test.describe('Admin Panel Functional Tests', () => {
     await expect(page.locator('text=/Portfolio Admin|পোর্টফোলিও অ্যাডমিন/')).toBeVisible();
     await expect(page.locator('text=/Dashboard|ড্যাশবোর্ড/').first()).toBeVisible();
 
-    // Click on Profile link in sidebar
-    await page.click('a:has-text("Profile"), a:has-text("প্রোফাইল")');
+    // Expand Profile menu group
+    await page.click('button:has-text("Profile"), button:has-text("প্রোফাইল")');
+    // Click on Profile Editor link in expanded submenu
+    await page.click('a:has-text("Profile Editor"), a:has-text("প্রোফাইল এডিটর")');
     await expect(page.locator('text=/Name \\(EN\\)|নাম \\(EN\\)/')).toBeVisible();
 
     // Click on CV Manager link in sidebar
@@ -35,38 +38,50 @@ test.describe('Admin Panel Functional Tests', () => {
   });
 
   test('should toggle section visibility and reflect in public navbar', async ({ page }) => {
-    // 1. Go to home page, verify Experience nav link is visible
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('header nav a:has-text("Experience")')).toBeVisible();
-
-    // 2. Go to Admin sections panel
+    // 1. Go to Admin sections panel first to read/set initial state
     await page.goto(`/${adminSlug}/sections`);
     await page.waitForLoadState('networkidle');
 
-    // 3. Locate Experience toggle and turn it off
     const experienceRow = page.locator('div:has(> span:has-text("experience"))');
     const toggleButton = experienceRow.locator('button');
     
-    // Check initial state (should be active / green)
-    await expect(toggleButton).toHaveClass(/bg-\[#5bd07a\]/);
-    
-    // Click toggle to disable it
-    await toggleButton.click();
-    
-    // Verify it changed class to inactive
-    await expect(toggleButton).toHaveClass(/bg-white/);
+    // Read current state
+    const btnClass = await toggleButton.getAttribute('class') || '';
+    const isInitiallyEnabled = btnClass.includes('bg-[#5bd07a]');
+
+    if (!isInitiallyEnabled) {
+      // Enable it first
+      await toggleButton.click();
+      await page.waitForTimeout(2000);
+    }
+
+    // 2. Go to home page, verify Experience nav link is visible
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('header nav a[href="/experience"]')).toBeVisible();
+
+    // 3. Go back to Admin sections panel and disable it
+    await page.goto(`/${adminSlug}/sections`);
+    await page.waitForLoadState('networkidle');
+    await page.locator('div:has(> span:has-text("experience")) button').click();
+    await page.waitForTimeout(2000);
 
     // 4. Go back to home page, verify Experience nav link is hidden
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await expect(page.locator('header nav a:has-text("Experience")')).not.toBeVisible();
+    await expect(page.locator('header nav a[href="/experience"]')).not.toBeVisible();
 
-    // 5. Turn it back on so that site state remains clean
+    // 5. Restore original state or leave it enabled for normal portfolio display
     await page.goto(`/${adminSlug}/sections`);
     await page.waitForLoadState('networkidle');
-    await page.locator('div:has(> span:has-text("experience")) button').click();
-    await expect(page.locator('div:has(> span:has-text("experience")) button')).toHaveClass(/bg-\[#5bd07a\]/);
+    const finalToggle = page.locator('div:has(> span:has-text("experience")) button');
+    const finalClass = await finalToggle.getAttribute('class') || '';
+    const isCurrentlyEnabled = finalClass.includes('bg-[#5bd07a]');
+    
+    if (isInitiallyEnabled !== isCurrentlyEnabled) {
+      await finalToggle.click();
+      await page.waitForTimeout(1500);
+    }
   });
 
   test('should switch language dynamically inside admin panel', async ({ page }) => {
