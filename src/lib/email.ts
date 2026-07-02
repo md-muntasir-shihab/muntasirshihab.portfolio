@@ -4,12 +4,13 @@
 
 const RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY || import.meta.env.RESEND_API_KEY
 const EMAIL_FROM = import.meta.env.VITE_EMAIL_FROM || import.meta.env.EMAIL_FROM || "onboarding@resend.dev"
-const EMAIL_TO = import.meta.env.VITE_EMAIL_TO || import.meta.env.EMAIL_TO || "muntasir.shihab@gmail.com"
+const EMAIL_TO = import.meta.env.VITE_EMAIL_TO || import.meta.env.EMAIL_TO || "mm.xihab@gmail.com"
 const SITE_URL = import.meta.env.VITE_SITE_URL || "https://muntasirshihab.web.app"
 const SITE_NAME = import.meta.env.VITE_SITE_NAME || "MD Muntasir Shihab Portfolio"
 
 // CORS proxies — primary + fallbacks (Resend API requires server-side; proxies bridge the gap from the browser)
 const CORS_PROXIES = [
+  "https://proxy.cors.sh/",
   "https://cors.x2u.in/",
   "https://corsproxy.io/?",
   "https://api.allorigins.win/raw?url=",
@@ -21,12 +22,16 @@ async function fetchWithCorsProxy(apiKey: string, payload: object): Promise<Resp
   for (const proxy of CORS_PROXIES) {
     try {
       const url = `${proxy}https://api.resend.com/emails`
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      }
+      if (proxy.includes("cors.sh")) {
+        headers["x-cors-gratis"] = "true"
+      }
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(payload),
       })
       // Any HTTP response means the proxy worked — return it
