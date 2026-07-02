@@ -208,7 +208,7 @@ function ProjectModal({ project, onClose, lang }: { project: any; onClose: () =>
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
-    return () => { document.body.style.overflow = "unset" }
+    return () => { document.body.style.overflow = "" }
   }, [])
 
   return (
@@ -328,7 +328,7 @@ function BlogModal({ post, onClose, lang }: { post: any; onClose: () => void; la
 
   useEffect(() => {
     document.body.style.overflow = "hidden"
-    return () => { document.body.style.overflow = "unset" }
+    return () => { document.body.style.overflow = "" }
   }, [])
 
   return (
@@ -564,7 +564,7 @@ function HomePage({ lang, setLang, onSelectProject }:{lang:Lang,setLang:(l:Lang)
             <SectionHeading kicker={t("Feedback","প্রতিক্রিয়া",lang)} title={t("What people say","মানুষ যা বলে",lang)} />
             <div className="grid md:grid-cols-2 gap-5">
               {testimonials.map((tm,idx)=>(
-                <MagicCard key={idx} className="moving-border">
+                <MagicCard key={idx}>
                   <div className="flex items-center gap-1 text-[#f0c96b] mb-3">{Array.from({length:5}).map((_,i)=><Star key={i} size={14} fill="#f0c96b"/>)}</div>
                   <div className={`text-[15.3px] leading-relaxed ${lt?"text-[#3a3730]":"text-[#d2d5df]"}`}>"{tm.text[lang]}"</div>
                   <div className={`mt-4 text-[13px] ${lt?"text-[#7a7366]":"text-[#a6adbd]"}`}>— {tm.name}, <span className={lt?"text-[#a0782e]":"text-[#d6bf84]"}>{tm.role[lang]}</span></div>
@@ -885,7 +885,7 @@ function TestimonialsPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
             <SectionHeading kicker={t("Recommendations","সুপারিশ",lang)} title={t("Verified Recommendations","যাচাইকৃত সুপারিশ",lang)} />
             <div className="grid md:grid-cols-2 gap-5">
               {recommendations.map((r)=>(
-                <div key={r.name} className="moving-border rounded-[20px]">
+                <div key={r.name} className="rounded-[20px]">
                   <div className={`rounded-[20px] p-[20px] ${lt?"bg-white/80 border border-[#e5e0d4]":"glass"}`}>
                     <div className="flex items-center gap-3">
                       {r.avatar ? (
