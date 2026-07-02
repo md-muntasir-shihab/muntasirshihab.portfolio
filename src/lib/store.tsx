@@ -24,7 +24,20 @@ export interface EmailTemplate {
 }
 
 export interface EmailLog {
-  id: string; templateId?: string; contactId?: string; toEmail: string; subject: string; status: string; sentAt: string; type: string;
+  id: string;
+  templateId?: string;
+  contactId?: string;
+  toEmail: string;
+  subject: string;
+  status: string;
+  sentAt: string;
+  type: string;
+  messageBody?: string;
+  recipientName?: string;
+  senderPhone?: string;
+  visitorMessage?: string;
+  cvIp?: string;
+  cvCountry?: string;
 }
 
 export interface FollowUp {

@@ -760,10 +760,19 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
 
     const [supaResult, adminEmailResult, visitorEmailResult] = await Promise.allSettled(promises)
 
+    let supaSuccess = true
     if (supaResult.status === 'rejected') {
       console.error('Supabase connection error:', supaResult.reason)
-    } else if (supaResult.value.error) {
+      supaSuccess = false
+    } else if (supaResult.value && supaResult.value.error) {
       console.error('Supabase insert error:', supaResult.value.error)
+      supaSuccess = false
+    }
+
+    if (!supaSuccess) {
+      toast.error(t("Database connection error. Please try again.", "ডাটাবেজ সংযোগ ত্রুটি। দয়া করে আবার চেষ্টা করুন।", lang))
+      setSending(false)
+      return
     }
 
     const nextLogs = [...emailLogs]
@@ -772,10 +781,14 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       nextLogs.push({
         id: Math.random().toString(36).slice(2, 11),
         toEmail: emailCfg.emailTo || "admin",
-        subject: `[Contact Form Alert] ${cleanSubject}`,
+        subject: adminSubject || `[Contact Form Alert] ${cleanSubject}`,
         status: success ? "success" : "failed",
         sentAt: timestamp,
         type: "admin-notify",
+        recipientName: cleanName,
+        senderPhone: cleanPhone,
+        visitorMessage: cleanMessage,
+        messageBody: adminHtml,
       })
       if (success) {
         console.log('[Contact] Admin email notification sent successfully')
@@ -789,10 +802,13 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       nextLogs.push({
         id: Math.random().toString(36).slice(2, 11),
         toEmail: cleanEmail,
-        subject: `Thank you for contacting me!`,
+        subject: visitorSubject || `Thank you for contacting me!`,
         status: success ? "success" : "failed",
         sentAt: timestamp,
         type: "auto-reply",
+        recipientName: cleanName,
+        visitorMessage: cleanMessage,
+        messageBody: visitorHtml,
       })
       if (success) {
         console.log('[Contact] Visitor confirmation email sent successfully')
@@ -1081,6 +1097,8 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
           status: success ? "success" : "failed",
           sentAt: new Date().toISOString(),
           type: "cv-download",
+          cvIp: ip || "Unknown",
+          cvCountry: country || "Unknown",
         })
         await updateEmailLogs(nextLogs)
       } catch (e) {

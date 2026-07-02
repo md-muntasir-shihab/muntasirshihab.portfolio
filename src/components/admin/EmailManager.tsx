@@ -4,13 +4,13 @@ import { type Lang } from "../../lib/data"
 import {
   Mail, Users, Settings, Plus, Trash2, Edit, Send, History,
   Sparkles, Code, Layout, Download, Upload, Star, Search,
-  X, Info
+  X, Info, RefreshCw
 } from "lucide-react"
 import { toast } from "sonner"
 import Papa from "papaparse"
 import Editor from "@monaco-editor/react"
 import EmailEditor from "react-email-editor"
-import { sendCustomEmail } from "../../lib/email"
+import { sendCustomEmail, sendContactNotification, sendVisitorConfirmation, sendCvDownloadNotification } from "../../lib/email"
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
@@ -848,6 +848,8 @@ function EmailCompose({ lang, initialTo, initialName, initialSubject }: { lang: 
         status: result ? "success" : "failed",
         sentAt: new Date().toISOString(),
         type: recipients.length > 1 ? "bulk-send" : "manual",
+        recipientName: rec.name,
+        messageBody: message,
       }
 
       activeLogs.push(newLog)
@@ -1396,9 +1398,10 @@ function EmailTemplates({ lang }: { lang: Lang }) {
    5. Email Logs Component
    ========================================================================== */
 function EmailLogs({ lang }: { lang: Lang }) {
-  const { emailLogs, updateEmailLogs } = useStore()
+  const { emailLogs, updateEmailLogs, emailSettings } = useStore()
   const [filterType, setFilterType] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
+  const [retryingId, setRetryingId] = useState<string | null>(null)
 
   // Filter logs list
   const filteredLogs = useMemo(() => {
@@ -1416,6 +1419,72 @@ function EmailLogs({ lang }: { lang: Lang }) {
     if (!confirm(t("Clear all logs permanently?", "সব ইমেইল লগস মুছে ফেলতে চান?", lang))) return
     await updateEmailLogs([])
     toast.success(t("Logs cleared successfully", "লগস মুছে ফেলা হয়েছে", lang))
+  }
+
+  const handleRetryLog = async (log: EmailLog) => {
+    if (retryingId) return
+    setRetryingId(log.id)
+    toast.loading(t("Retrying email send...", "ইমেইল পুনরায় পাঠানোর চেষ্টা করা হচ্ছে...", lang), { id: log.id })
+    
+    const emailCfg = {
+      resendApiKey: (emailSettings as any).resendApiKey || undefined,
+      emailFrom: emailSettings.fromEmail || undefined,
+      emailTo: emailSettings.adminEmail || undefined
+    }
+
+    let result = false
+    try {
+      if (log.type === "admin-notify") {
+        result = await sendContactNotification({
+          name: log.recipientName || "Visitor",
+          email: "", 
+          phone: log.senderPhone || "",
+          message: log.visitorMessage || "",
+          timestamp: log.sentAt,
+          subject: log.subject,
+          html: log.messageBody
+        }, emailCfg)
+      } else if (log.type === "auto-reply") {
+        result = await sendVisitorConfirmation(
+          log.recipientName || "Visitor",
+          log.toEmail,
+          log.visitorMessage || "",
+          {
+            ...emailCfg,
+            subject: log.subject,
+            html: log.messageBody
+          }
+        )
+      } else if (log.type === "cv-download") {
+        result = await sendCvDownloadNotification(
+          log.cvIp || "Unknown",
+          log.cvCountry || "Unknown",
+          emailCfg
+        )
+      } else {
+        // manual or bulk-send
+        result = await sendCustomEmail({
+          to: log.toEmail,
+          recipientName: log.recipientName || "Recipient",
+          subject: log.subject,
+          message: log.messageBody || "",
+          templateId: "custom",
+          config: emailCfg
+        })
+      }
+    } catch (e) {
+      console.error(e)
+    }
+
+    setRetryingId(null)
+
+    if (result) {
+      toast.success(t("Email resent successfully!", "ইমেইল সফলভাবে পাঠানো হয়েছে!", lang), { id: log.id })
+      const nextLogs = emailLogs.map(l => l.id === log.id ? { ...l, status: "success" as const } : l)
+      await updateEmailLogs(nextLogs)
+    } else {
+      toast.error(t("Failed to resend email.", "ইমেইল পুনরায় পাঠাতে ব্যর্থ হয়েছে।", lang), { id: log.id })
+    }
   }
 
   return (
@@ -1458,7 +1527,7 @@ function EmailLogs({ lang }: { lang: Lang }) {
       </div>
 
       {/* Main logs list */}
-      <div className="glass rounded-[18px] border border-white/7.000000000000001 overflow-hidden">
+      <div className="glass rounded-[18px] border border-white/7 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-[13px]">
             <thead className="bg-white/2 border-b border-white/6 text-[#7e8391] uppercase text-[10.5px] tracking-wider">
@@ -1468,12 +1537,13 @@ function EmailLogs({ lang }: { lang: Lang }) {
                 <th className="py-3 px-4">{t("Type", "ধরণ", lang)}</th>
                 <th className="py-3 px-4">{t("Status", "স্ট্যাটাস", lang)}</th>
                 <th className="py-3 px-4">{t("Sent At", "সময়", lang)}</th>
+                <th className="py-3 px-4 text-right">{t("Actions", "অ্যাকশন", lang)}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/4">
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#7e8391]">
+                  <td colSpan={6} className="py-12 text-center text-[#7e8391]">
                     {t("No log history matches the current filters.", "ফিল্টার অনুযায়ী কোনো ইমেইল লগস পাওয়া যায়নি।", lang)}
                   </td>
                 </tr>
@@ -1483,7 +1553,7 @@ function EmailLogs({ lang }: { lang: Lang }) {
                     <td className="py-3.5 px-4 font-mono font-semibold text-[#e8e9ef]">{log.toEmail}</td>
                     <td className="py-3.5 px-4 text-[#a3a7b4] truncate max-w-[200px]">{log.subject}</td>
                     <td className="py-3.5 px-4">
-                      <span className="capitalize px-2 py-0.5 rounded text-[11px] bg-white/3 border border-white/7.000000000000001 text-[#a3a7b4]">
+                      <span className="capitalize px-2 py-0.5 rounded text-[11px] bg-white/3 border border-white/7 text-[#a3a7b4]">
                         {log.type}
                       </span>
                     </td>
@@ -1498,6 +1568,18 @@ function EmailLogs({ lang }: { lang: Lang }) {
                     </td>
                     <td className="py-3.5 px-4 text-[#7e8391]">
                       {new Date(log.sentAt).toLocaleString()}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => handleRetryLog(log)}
+                        disabled={retryingId === log.id}
+                        title={t("Retry Send", "পুনরায় পাঠান", lang)}
+                        className={`p-1.5 rounded-lg bg-gold/10 hover:bg-gold/20 border border-gold/20 text-gold transition cursor-pointer inline-flex items-center justify-center ${
+                          retryingId === log.id ? "opacity-55 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <RefreshCw size={14} className={retryingId === log.id ? "animate-spin" : ""} />
+                      </button>
                     </td>
                   </tr>
                 ))
