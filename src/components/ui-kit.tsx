@@ -89,7 +89,7 @@ export function PageShell({ bg, children, title, subtitle, description }:{
 export function PageTransition({children}:{children:ReactNode}){
   const loc = useLocation()
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="wait" onExitComplete={() => window.scrollTo(0, 0)}>
       <motion.div
         key={loc.pathname}
         initial={{ opacity: 0, y: 16 }}

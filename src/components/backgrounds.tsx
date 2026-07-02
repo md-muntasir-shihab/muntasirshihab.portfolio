@@ -17,11 +17,12 @@ type BGType =
   | "particleGrid"
 
 export function AnimatedBackground({ type }: { type: BGType }) {
+  // To keep animations minimalist and improve performance, we remove heavy Canvas layers.
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden bg-[#07070b]">
-      <BackgroundLayer type={type} />
+      {/* Light subtle gradients instead of heavy canvas animations */}
       <div className="absolute inset-0 bg-[radial-gradient(1200px_700px_at_70%_-10%,rgba(231,184,75,0.05),transparent),radial-gradient(900px_600px_at_0%_100%,rgba(120,88,255,0.034),transparent)]" />
-      <div className="absolute inset-0 opacity-[0.045] noise-overlay pointer-events-none" />
+      <div className="absolute inset-0 opacity-[0.03] noise-overlay pointer-events-none" />
     </div>
   )
 }
