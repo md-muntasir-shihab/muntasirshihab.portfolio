@@ -14,9 +14,28 @@ import { sendCustomEmail, sendContactNotification, sendVisitorConfirmation, send
 
 const t = (en: string, bn: string, lang: Lang) => (lang === "bn" ? bn : en)
 
-export default function EmailManager({ lang }: { lang: Lang }) {
-  const [activeTab, setActiveTab] = useState<string>("dashboard")
+export default function EmailManager({ lang, initialTab }: { lang: Lang; initialTab?: string }) {
+  // Map URL sub-path keys → internal tab IDs
+  const resolveTab = (key?: string) => {
+    if (!key) return "dashboard"
+    const map: Record<string, string> = {
+      "email": "dashboard",
+      "email/contacts": "contacts",
+      "email/compose": "compose",
+      "email/templates": "templates",
+      "email/logs": "logs",
+      "email/settings": "settings",
+    }
+    return map[key] ?? "dashboard"
+  }
+
+  const [activeTab, setActiveTab] = useState<string>(() => resolveTab(initialTab))
   const [prefilledRecipient, setPrefilledRecipient] = useState<{ to: string; name: string; subject: string } | null>(null)
+
+  // Sync tab when the URL changes (user navigates from sidebar)
+  useEffect(() => {
+    setActiveTab(resolveTab(initialTab))
+  }, [initialTab])
 
   // Read URL params — if ?to= is present, auto-switch to compose
   useEffect(() => {
@@ -763,9 +782,21 @@ function EmailCompose({ lang, initialTo, initialName, initialSubject }: { lang: 
   const [sending, setSending] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
 
+  const isInitial = useRef(true)
+
   // Follow-up Schedule state
   const [scheduleFollowUp, setScheduleFollowUp] = useState(false)
   const [scheduledDate, setScheduledDate] = useState("")
+
+  // Prefill hook for direct reply redirection
+  useEffect(() => {
+    if (initialTo) {
+      setRecipientType("direct")
+      setManualEmail(initialTo)
+      setManualName(initialName || "")
+      setSubject(initialSubject || "")
+    }
+  }, [initialTo, initialName, initialSubject])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -791,6 +822,10 @@ function EmailCompose({ lang, initialTo, initialName, initialSubject }: { lang: 
 
   // Template select side-effect
   useEffect(() => {
+    if (isInitial.current) {
+      isInitial.current = false
+      return
+    }
     if (selectedTemplate === "custom") {
       setSubject("")
       setMessage("")
@@ -845,7 +880,7 @@ function EmailCompose({ lang, initialTo, initialName, initialSubject }: { lang: 
         contactId: rec.id,
         toEmail: rec.email,
         subject,
-        status: result ? "success" : "failed",
+        status: result.success ? "success" : "failed",
         sentAt: new Date().toISOString(),
         type: recipients.length > 1 ? "bulk-send" : "manual",
         recipientName: rec.name,
@@ -854,8 +889,8 @@ function EmailCompose({ lang, initialTo, initialName, initialSubject }: { lang: 
 
       activeLogs.push(newLog)
 
-      if (result) successCount++
-      else failCount++
+      if (result.success) successCount++
+      else { failCount++; if (result.error) console.warn("[EmailManager] Send failed:", result.error) }
 
       // 100ms rate limit delay
       await new Promise((r) => setTimeout(r, 100))
@@ -1463,7 +1498,7 @@ function EmailLogs({ lang }: { lang: Lang }) {
         )
       } else {
         // manual or bulk-send
-        result = await sendCustomEmail({
+        const customResult = await sendCustomEmail({
           to: log.toEmail,
           recipientName: log.recipientName || "Recipient",
           subject: log.subject,
@@ -1471,6 +1506,12 @@ function EmailLogs({ lang }: { lang: Lang }) {
           templateId: "custom",
           config: emailCfg
         })
+        result = customResult.success
+        if (!customResult.success && customResult.error) {
+          toast.error(customResult.error, { id: log.id })
+          setRetryingId(null)
+          return
+        }
       }
     } catch (e) {
       console.error(e)

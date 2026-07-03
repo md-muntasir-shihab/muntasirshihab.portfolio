@@ -30,12 +30,14 @@ export default function MediaManager({ lang }: { lang: Lang }) {
   }, [folder])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
     try {
       setUploading(true)
-      await uploadImage(file, folder)
+      for (let i = 0; i < files.length; i++) {
+        await uploadImage(files[i], folder)
+      }
       await fetchFiles()
     } catch (err: any) {
       alert(err.message || "Upload failed")
@@ -94,7 +96,7 @@ export default function MediaManager({ lang }: { lang: Lang }) {
                 <Upload size={14} /> {t("Upload Image", "ছবি আপলোড", lang)}
               </>
             )}
-            <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={handleUpload} />
+            <input type="file" accept="image/*" multiple className="hidden" disabled={uploading} onChange={handleUpload} />
           </label>
         </div>
       </div>

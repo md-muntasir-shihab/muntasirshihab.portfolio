@@ -115,12 +115,22 @@ export default function ProjectsManager({ lang }: { lang: Lang }) {
   }
 
   const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setUploading(true)
     try {
-      const result = await uploadImage(file, "projects")
-      setCurrentItem((prev) => ({ ...prev, img: result.url }))
+      // First file → cover image
+      const firstResult = await uploadImage(files[0], "projects")
+      setCurrentItem((prev) => ({ ...prev, img: firstResult.url }))
+      // Remaining files → gallery
+      if (files.length > 1) {
+        const galleryUrls: string[] = []
+        for (let i = 1; i < files.length; i++) {
+          const r = await uploadImage(files[i], "projects")
+          galleryUrls.push(r.url)
+        }
+        setCurrentItem((prev) => ({ ...prev, images: [...(prev.images || []), ...galleryUrls] }))
+      }
     } catch (err: any) {
       alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
     } finally {
@@ -129,13 +139,17 @@ export default function ProjectsManager({ lang }: { lang: Lang }) {
   }
 
   const handleUploadGalleryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setUploadingGallery(true)
     try {
-      const result = await uploadImage(file, "projects")
+      const urls: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const result = await uploadImage(files[i], "projects")
+        urls.push(result.url)
+      }
       const currentGallery = currentItem.images || []
-      setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, result.url] }))
+      setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, ...urls] }))
     } catch (err: any) {
       alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
     } finally {
@@ -228,7 +242,7 @@ export default function ProjectsManager({ lang }: { lang: Lang }) {
                 <label className="px-4 h-[40px] rounded-[9px] bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] flex items-center justify-center gap-2 cursor-pointer transition text-[13.5px] font-[600]">
                   {uploading ? <Loader size={15} className="animate-spin" /> : <Upload size={15} />}
                   {t("Upload", "আপলোড", lang)}
-                  <input type="file" accept="image/*" onChange={handleUploadImage} className="hidden" />
+                  <input type="file" accept="image/*" multiple onChange={handleUploadImage} className="hidden" />
                 </label>
               </div>
             </div>
@@ -252,8 +266,8 @@ export default function ProjectsManager({ lang }: { lang: Lang }) {
                 </button>
                 <label className="px-4 h-[40px] rounded-[9px] bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] flex items-center justify-center gap-2 cursor-pointer transition text-[13.5px] font-[600]">
                   {uploadingGallery ? <Loader size={15} className="animate-spin" /> : <Upload size={15} />}
-                  {t("Upload", "আপলোড", lang)}
-                  <input type="file" accept="image/*" onChange={handleUploadGalleryImage} className="hidden" />
+                  {t("Upload Images", "ছবি আপলোড", lang)}
+                  <input type="file" accept="image/*" multiple onChange={handleUploadGalleryImage} className="hidden" />
                 </label>
               </div>
               

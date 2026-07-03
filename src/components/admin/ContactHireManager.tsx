@@ -66,7 +66,7 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
     setComposeSending(true)
     setComposeError("")
     try {
-      const ok = await sendCustomEmail({
+      const result = await sendCustomEmail({
         to: composeTo,
         recipientName: composeName || composeTo.split("@")[0],
         subject: composeSubject,
@@ -74,11 +74,11 @@ export default function ContactHireManager({ lang }: { lang: Lang }) {
         templateId: "custom", // uses dynamic HTML override directly
         config: emailConfig,
       })
-      if (ok) {
+      if (result.success) {
         setComposeSent(true)
         setTimeout(() => { setComposeSent(false); setComposeOpen(false); resetComposer() }, 2500)
       } else {
-        setComposeError(t("Failed to send. Check your Resend API key.", "পাঠাতে ব্যর্থ। Resend API কী চেক করুন।", lang))
+        setComposeError(result.error || t("Failed to send. Check your Resend API key.", "পাঠাতে ব্যর্থ। Resend API কী চেক করুন।", lang))
       }
     } catch {
       setComposeError(t("Network error", "নেটওয়ার্ক ত্রুটি", lang))

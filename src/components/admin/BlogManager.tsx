@@ -40,12 +40,22 @@ export default function BlogManager({ lang }: { lang: Lang }) {
   const [galleryUrlInput, setGalleryUrlInput] = useState("")
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setUploadingImageState(true)
     try {
-      const result = await uploadImage(file, "blog")
-      setCurrentItem((prev) => ({ ...prev, image: result.url }))
+      // First file → cover image
+      const firstResult = await uploadImage(files[0], "blog")
+      setCurrentItem((prev) => ({ ...prev, image: firstResult.url }))
+      // Remaining files → gallery
+      if (files.length > 1) {
+        const galleryUrls: string[] = []
+        for (let i = 1; i < files.length; i++) {
+          const r = await uploadImage(files[i], "blog")
+          galleryUrls.push(r.url)
+        }
+        setCurrentItem((prev) => ({ ...prev, images: [...(prev.images || []), ...galleryUrls] }))
+      }
     } catch (err: any) {
       alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
     } finally {
@@ -54,13 +64,17 @@ export default function BlogManager({ lang }: { lang: Lang }) {
   }
 
   const handleUploadGalleryImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setUploadingGallery(true)
     try {
-      const result = await uploadImage(file, "blog")
+      const urls: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const result = await uploadImage(files[i], "blog")
+        urls.push(result.url)
+      }
       const currentGallery = currentItem.images || []
-      setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, result.url] }))
+      setCurrentItem((prev) => ({ ...prev, images: [...currentGallery, ...urls] }))
     } catch (err: any) {
       alert(t("Upload failed: ", "আপলোড ব্যর্থ হয়েছে: ", lang) + err.message)
     } finally {
@@ -251,7 +265,7 @@ export default function BlogManager({ lang }: { lang: Lang }) {
                   <label className="inline-flex px-4 h-9 rounded-lg bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] items-center justify-center gap-2 cursor-pointer transition text-[12.5px] font-[600]">
                     {uploadingImageState ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
                     {t("Upload Cover Image", "কভার ছবি আপলোড", lang)}
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
                   </label>
                   <p className="text-[11px] text-[#7e8391]">{t("Landscape banner format recommended (max 3MB)", "ল্যান্ডস্কেপ ব্যানার ফরম্যাট সাজেস্টেড (সর্বোচ্চ ৩MB)", lang)}</p>
                 </div>
@@ -278,8 +292,8 @@ export default function BlogManager({ lang }: { lang: Lang }) {
                 </button>
                 <label className="px-4 h-[40px] rounded-[9px] bg-[#e7b84b]/10 border border-[#e7b84b]/30 hover:bg-[#e7b84b]/20 text-[#e7b84b] flex items-center justify-center gap-2 cursor-pointer transition text-[13.5px] font-[600]">
                   {uploadingGallery ? <Loader size={15} className="animate-spin" /> : <Upload size={15} />}
-                  {t("Upload", "আপলোড", lang)}
-                  <input type="file" accept="image/*" onChange={handleUploadGalleryImage} className="hidden" />
+                  {t("Upload Images", "ছবি আপলোড", lang)}
+                  <input type="file" accept="image/*" multiple onChange={handleUploadGalleryImage} className="hidden" />
                 </label>
               </div>
 

@@ -980,28 +980,36 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     }
     await updateContacts(nextContacts)
 
-    // Store to Supabase Database via portfolio_content (parallel with email)
-    // Send email notifications via Resend depending on admin control
-    const promises: Promise<any>[] = [
-      (async () => {
-        const { data } = await supabase.from('portfolio_content').select('value').eq('key', 'messages').single()
-        const existing = data?.value || []
-        const newMsg = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          name: cleanName,
-          email: cleanEmail,
-          phone: cleanPhone,
-          message: cleanMessage,
-          date: timestamp,
-          read: false
-        }
-        return supabase.rpc('upsert_portfolio_content', {
-          p_key: 'messages',
-          p_value: [newMsg, ...existing]
-        })
-      })()
-    ]
+    // Store to Supabase Database via portfolio_content
+    const { data, error } = await supabase.from('portfolio_content').select('value').eq('key', 'messages').single()
+    const existing = data?.value || []
+    const newMsg = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      message: cleanMessage,
+      date: timestamp,
+      read: false
+    }
+    const supaResult = await supabase.rpc('upsert_portfolio_content', {
+      p_key: 'messages',
+      p_value: [newMsg, ...existing]
+    })
 
+    if (supaResult.error) {
+      console.error('Supabase insert error:', supaResult.error)
+      toast.error(t("Database connection error. Please try again.", "ডাটাবেজ সংযোগ ত্রুটি। দয়া করে আবার চেষ্টা করুন।", lang))
+      setSending(false)
+      return
+    }
+
+    // Success UI Feedback immediately!
+    toast.success(t("Message sent successfully!", "মেসেজ সফলভাবে পাঠানো হয়েছে!", lang))
+    setSent(true)
+    setSending(false)
+
+    // Process Emails Asynchronously in the Background
     const runAdminEmail = emailSettings.sendAdminNotify !== false
     const runVisitorEmail = emailSettings.sendAutoReply !== false
     const emailCfg = {
@@ -1010,7 +1018,6 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       emailTo: emailSettings.adminEmail || hireMe.emailTo || undefined
     }
 
-    // Compile templates if available
     const compileTemplate = (subjectTpl: string, bodyTpl: string, vars: Record<string, string>) => {
       let s = subjectTpl
       let h = bodyTpl
@@ -1050,96 +1057,66 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       adminHtml = compiled.html
     }
 
+    const emailPromises: Promise<boolean>[] = []
+
     if (runAdminEmail) {
-      promises.push(sendContactNotification({ 
-        name: cleanName, 
-        email: cleanEmail, 
-        phone: cleanPhone, 
-        message: cleanMessage, 
-        timestamp,
-        subject: adminSubject,
-        html: adminHtml
+      emailPromises.push(sendContactNotification({ 
+        name: cleanName, email: cleanEmail, phone: cleanPhone, message: cleanMessage, 
+        timestamp, subject: adminSubject, html: adminHtml
       }, emailCfg))
     } else {
-      promises.push(Promise.resolve(false))
+      emailPromises.push(Promise.resolve(false))
     }
 
     if (runVisitorEmail) {
-      promises.push(sendVisitorConfirmation(cleanName, cleanEmail, cleanMessage, {
-        ...emailCfg,
-        subject: visitorSubject,
-        html: visitorHtml
+      emailPromises.push(sendVisitorConfirmation(cleanName, cleanEmail, cleanMessage, {
+        ...emailCfg, subject: visitorSubject, html: visitorHtml
       }))
     } else {
-      promises.push(Promise.resolve(false))
+      emailPromises.push(Promise.resolve(false))
     }
 
-    const [supaResult, adminEmailResult, visitorEmailResult] = await Promise.allSettled(promises)
-
-    let supaSuccess = true
-    if (supaResult.status === 'rejected') {
-      console.error('Supabase connection error:', supaResult.reason)
-      supaSuccess = false
-    } else if (supaResult.value && supaResult.value.error) {
-      console.error('Supabase insert error:', supaResult.value.error)
-      supaSuccess = false
-    }
-
-    if (!supaSuccess) {
-      toast.error(t("Database connection error. Please try again.", "ডাটাবেজ সংযোগ ত্রুটি। দয়া করে আবার চেষ্টা করুন।", lang))
-      setSending(false)
-      return
-    }
-
-    const nextLogs = [...emailLogs]
-    if (runAdminEmail) {
-      const success = adminEmailResult.status === 'fulfilled' && adminEmailResult.value
-      nextLogs.push({
-        id: Math.random().toString(36).slice(2, 11),
-        toEmail: emailCfg.emailTo || "admin",
-        subject: adminSubject || `[Contact Form Alert] ${cleanSubject}`,
-        status: success ? "success" : "failed",
-        sentAt: timestamp,
-        type: "admin-notify",
-        recipientName: cleanName,
-        senderPhone: cleanPhone,
-        visitorMessage: cleanMessage,
-        messageBody: adminHtml,
-      })
-      if (success) {
-        console.log('[Contact] Admin email notification sent successfully')
-      } else {
-        console.error('[Contact] Admin email notification failed')
+    Promise.allSettled(emailPromises).then(async ([adminEmailResult, visitorEmailResult]) => {
+      const nextLogs = [...emailLogs]
+      if (runAdminEmail) {
+        const success = adminEmailResult.status === 'fulfilled' && adminEmailResult.value
+        nextLogs.push({
+          id: Math.random().toString(36).slice(2, 11),
+          toEmail: emailCfg.emailTo || "admin",
+          subject: adminSubject || `[Contact Form Alert] ${cleanSubject}`,
+          status: success ? "success" : "failed",
+          sentAt: timestamp,
+          type: "admin-notify",
+          recipientName: cleanName,
+          senderPhone: cleanPhone,
+          visitorMessage: cleanMessage,
+          messageBody: adminHtml,
+        })
+        if (success) console.log('[Contact] Admin email notification sent successfully')
+        else console.error('[Contact] Admin email notification failed')
       }
-    }
 
-    if (runVisitorEmail) {
-      const success = visitorEmailResult.status === 'fulfilled' && visitorEmailResult.value
-      nextLogs.push({
-        id: Math.random().toString(36).slice(2, 11),
-        toEmail: cleanEmail,
-        subject: visitorSubject || `Thank you for contacting me!`,
-        status: success ? "success" : "failed",
-        sentAt: timestamp,
-        type: "auto-reply",
-        recipientName: cleanName,
-        visitorMessage: cleanMessage,
-        messageBody: visitorHtml,
-      })
-      if (success) {
-        console.log('[Contact] Visitor confirmation email sent successfully')
-      } else {
-        console.error('[Contact] Visitor confirmation email failed')
+      if (runVisitorEmail) {
+        const success = visitorEmailResult.status === 'fulfilled' && visitorEmailResult.value
+        nextLogs.push({
+          id: Math.random().toString(36).slice(2, 11),
+          toEmail: cleanEmail,
+          subject: visitorSubject || `Thank you for contacting me!`,
+          status: success ? "success" : "failed",
+          sentAt: timestamp,
+          type: "auto-reply",
+          recipientName: cleanName,
+          visitorMessage: cleanMessage,
+          messageBody: visitorHtml,
+        })
+        if (success) console.log('[Contact] Visitor confirmation email sent successfully')
+        else console.error('[Contact] Visitor confirmation email failed')
       }
-    }
 
-    if (nextLogs.length > emailLogs.length) {
-      await updateEmailLogs(nextLogs)
-    }
-
-    toast.success(t("Message sent successfully!", "মেসেজ সফলভাবে পাঠানো হয়েছে!", lang))
-    setSent(true)
-    setSending(false)
+      if (nextLogs.length > emailLogs.length) {
+        await updateEmailLogs(nextLogs)
+      }
+    })
   }
   const inputCls = `w-full mt-[6px] px-4 h-[46px] rounded-[12px] outline-none cursor-text ${lt?"bg-[#f5f3ee] border border-[#e5e0d4] focus:border-[#dbc897] text-[#1a1a1f] caret-amber-600":"bg-black/22 border border-white/[0.11] focus:border-yellow-500/40 text-[#e8e9ef] caret-[#e7b84b]"}`
   return (
@@ -1166,7 +1143,10 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
             return (
               <div className="space-y-6">
                 {cats.map(cat => {
-                  const items = active.filter(s => (s as any).category === cat.key)
+                  const items = active.filter(s => {
+                    const catKey = (s as any).category || "social"
+                    return catKey === cat.key
+                  })
                   if (items.length === 0) return null
                   const Icon = cat.icon
                   return (
@@ -1177,14 +1157,20 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                         <div className={`flex-1 h-[1px] ${lt ? "bg-[#e5e0d4]/60" : "bg-white/[0.05]"}`}/>
                       </div>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                        {items.map((s) => (
-                          <a
+                        {items.map((s, idx) => (
+                          <motion.a
                             key={s.name}
                             href={s.url}
                             target="_blank"
                             rel="noreferrer"
+                            initial={{ opacity: 0, y: 12 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.35, delay: idx * 0.04 }}
+                            whileHover={{ y: -6, scale: 1.08, rotate: Math.sin(idx) * 2 }}
+                            whileTap={{ scale: 0.96 }}
                             title={`${s.name}: ${s.handle}`}
-                            className={`group relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-[16px] cursor-pointer transition-[transform,border-color] duration-200 ease-out hover:-translate-y-1.5 ${lt?"bg-white border border-[#e5e0d4] hover:border-[#dbc897]":"glass hover:border-yellow-500/30"}`}
+                            className={`group relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-[16px] cursor-pointer transition-[border-color] duration-200 ${lt?"bg-white border border-[#e5e0d4] hover:border-[#dbc897]":"glass hover:border-yellow-500/30"}`}
                           >
                             <div
                               className={`w-11 h-11 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 overflow-hidden ${lt?"bg-[#f0e6cf]":"bg-white/[0.06]"}`}
@@ -1193,7 +1179,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
                               <SocialIcon name={s.name} size={20} customLogo={s.customLogo}/>
                             </div>
                             <div className={`text-[10.5px] font-[600] tracking-wide text-center ${lt?"text-[#5a5449] group-hover:text-[#8a6b2b]":"text-[#c8cad4] group-hover:text-white"}`}>{s.name}</div>
-                          </a>
+                          </motion.a>
                         ))}
                       </div>
                     </div>
@@ -1710,7 +1696,7 @@ function AdminPanel({activeKey, lang}:{activeKey:string, lang:Lang}){
     case "email/templates":
     case "email/logs":
     case "email/settings":
-      return <EmailManager lang={lang}/>
+      return <EmailManager key={activeKey} lang={lang} initialTab={activeKey}/>
     case "cv": return <CVManager lang={lang}/>
     case "security": return <AdminSecurity lang={lang}/>
     case "cache": return <AdminCache lang={lang}/>

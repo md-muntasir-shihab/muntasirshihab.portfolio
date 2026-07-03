@@ -82,7 +82,7 @@ export default function ProfileEditor({ lang }: { lang: Lang }) {
   }
 
   const addSocial = () => {
-    setSocials([...socials, { name: "Custom Site", url: "https://", color: "#e7b84b", enabled: true }])
+    setSocials([...socials, { name: "Custom Site", url: "https://", color: "#e7b84b", enabled: true, category: "social" }])
   }
 
   const deleteSocial = (index: number) => {
@@ -332,6 +332,20 @@ export default function ProfileEditor({ lang }: { lang: Lang }) {
                   placeholder="Brand Logo Image URL"
                   className="w-full md:w-[180px] px-3 h-[36px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13.5px]"
                 />
+                <select
+                  title={t("Social Media Category", "সোশ্যাল মিডিয়া ক্যাটাগরি", lang)}
+                  value={soc.category || "social"}
+                  onChange={(e) => {
+                    const next = [...socials]
+                    next[idx].category = e.target.value
+                    setSocials(next)
+                  }}
+                  className="w-full md:w-[130px] px-2 h-[36px] rounded-[8px] bg-black/20 border border-white/[0.1] text-[13.5px] text-[#e8e9ef] outline-none"
+                >
+                  <option value="social" className="bg-[#12121b]">{t("Social", "সোশ্যাল", lang)}</option>
+                  <option value="professional" className="bg-[#12121b]">{t("Professional", "প্রফেশনাল", lang)}</option>
+                  <option value="design" className="bg-[#12121b]">{t("Design & Creative", "ডিজাইন ও ক্রিয়েটিভ", lang)}</option>
+                </select>
                 <div className="flex items-center gap-2 max-md:w-full max-md:justify-between">
                   <button
                     onClick={() => {
