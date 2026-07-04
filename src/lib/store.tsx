@@ -190,31 +190,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .from("cv_downloads")
           .select("*", { count: "exact", head: true })
 
-        setState((s) => ({
-          ...s,
-          profile: dbState.profile ? { ...s.profile, ...dbState.profile } : s.profile,
-          experience: dbState.experience || s.experience,
-          education: dbState.education || s.education,
-          skills: dbState.skills || s.skills,
-          projects: dbState.projects || s.projects,
-          testimonials: dbState.testimonials || s.testimonials,
-          recommendations: dbState.recommendations || s.recommendations,
-          blogPosts: dbState.blogPosts || s.blogPosts,
-          services: dbState.services || s.services,
-          tools: dbState.tools || s.tools,
-          hireMe: dbState.hireMe || s.hireMe,
-          achievements: dbState.achievements || s.achievements,
-          visibility: dbState.visibility ? { ...s.visibility, ...dbState.visibility } : s.visibility,
-          pageBackgroundMap: dbState.pageBackgroundMap ? { ...s.pageBackgroundMap, ...dbState.pageBackgroundMap } : s.pageBackgroundMap,
-          messages: dbState.messages || [],
-          contacts: dbState.contacts || [],
-          emailTemplates: (dbState.emailTemplates && dbState.emailTemplates.length > 0) ? dbState.emailTemplates : getDefaultTemplates(),
-          emailLogs: dbState.emailLogs || [],
-          followUps: dbState.followUps || [],
-          emailSettings: dbState.emailSettings || { resendApiKey: "", fromName: "", fromEmail: "", replyTo: "", adminEmail: "", sendAutoReply: true, sendAdminNotify: true, sendCvNotify: true, sendVisitorNotify: false, footerText: "", signatureHtml: "" },
-          cvCount: cvDownloadsCount !== null && !cvError ? cvDownloadsCount : 0,
-          admin_2fa: dbState.admin_2fa || { enabled: false, encryptedSecret: "" },
-        }))
+        setState((s) => {
+          let mergedProfile = s.profile;
+          if (dbState.profile) {
+            mergedProfile = {
+              ...s.profile,
+              ...dbState.profile,
+              name: { ...s.profile.name, ...(dbState.profile.name || {}) },
+              title: { ...s.profile.title, ...(dbState.profile.title || {}) },
+              bioShort: { ...s.profile.bioShort, ...(dbState.profile.bioShort || {}) },
+              bioLong: { ...s.profile.bioLong, ...(dbState.profile.bioLong || {}) },
+              location: { ...s.profile.location, ...(dbState.profile.location || {}) },
+              personalDetails: { ...s.profile.personalDetails, ...(dbState.profile.personalDetails || {}) },
+            };
+          }
+          return {
+            ...s,
+            profile: mergedProfile,
+            experience: dbState.experience || s.experience,
+            education: dbState.education || s.education,
+            skills: dbState.skills || s.skills,
+            projects: dbState.projects || s.projects,
+            testimonials: dbState.testimonials || s.testimonials,
+            recommendations: dbState.recommendations || s.recommendations,
+            blogPosts: dbState.blogPosts || s.blogPosts,
+            services: dbState.services || s.services,
+            tools: dbState.tools || s.tools,
+            currentlyWorkingOn: dbState.profile?.currentlyWorkingOn || s.profile.currentlyWorkingOn,
+            hireMe: dbState.hireMe || s.hireMe,
+            achievements: dbState.achievements || s.achievements,
+            visibility: dbState.visibility ? { ...s.visibility, ...dbState.visibility } : s.visibility,
+            pageBackgroundMap: dbState.pageBackgroundMap ? { ...s.pageBackgroundMap, ...dbState.pageBackgroundMap } : s.pageBackgroundMap,
+            messages: dbState.messages || [],
+            contacts: dbState.contacts || [],
+            emailTemplates: (dbState.emailTemplates && dbState.emailTemplates.length > 0) ? dbState.emailTemplates : getDefaultTemplates(),
+            emailLogs: dbState.emailLogs || [],
+            followUps: dbState.followUps || [],
+            emailSettings: dbState.emailSettings || { resendApiKey: "", fromName: "", fromEmail: "", replyTo: "", adminEmail: "", sendAutoReply: true, sendAdminNotify: true, sendCvNotify: true, sendVisitorNotify: false, footerText: "", signatureHtml: "" },
+            cvCount: cvDownloadsCount !== null && !cvError ? cvDownloadsCount : 0,
+            admin_2fa: dbState.admin_2fa || { enabled: false, encryptedSecret: "" },
+          };
+        })
 
       } catch (err) {
         console.warn("[Store] Failed to load data from Supabase, using defaults:", err)

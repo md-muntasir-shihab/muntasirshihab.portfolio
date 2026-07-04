@@ -25,6 +25,7 @@ import ContactHireManager from "./components/admin/ContactHireManager"
 import BlogManager from "./components/admin/BlogManager"
 import CVManager from "./components/admin/CVManager"
 import MediaManager from "./components/admin/MediaManager"
+import AtsCvModal from "./components/AtsCvModal"
 import AnalyticsDashboard from "./components/admin/AnalyticsDashboard"
 import EmailManager from "./components/admin/EmailManager"
 import { trackVisitor, sendDuration, trackCvDownload, getGeo } from "./lib/analytics"
@@ -32,7 +33,7 @@ import confetti from "canvas-confetti"
 import {
   ArrowUpRight, Code2, Star, Calendar, Send, MapPin, Clock,
   ShieldCheck, Lock, UserCheck, Phone, Mail, MessageCircle, Menu, Bell, ChevronRight, ChevronDown, AlertTriangle,
-  X, ChevronLeft, Globe
+  X, ChevronLeft, Globe, GraduationCap, Award
 } from "lucide-react"
 
 // Social brand icons (inline SVG - brand-colored)
@@ -158,12 +159,16 @@ function ImageCarousel({ images }: { images: string[] }) {
             <button
               onClick={() => setActive((active - 1 + images.length) % images.length)}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+              title="Previous Image"
+              aria-label="Previous Image"
             >
               <ChevronLeft size={18} />
             </button>
             <button
               onClick={() => setActive((active + 1) % images.length)}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+              title="Next Image"
+              aria-label="Next Image"
             >
               <ChevronRight size={18} />
             </button>
@@ -175,6 +180,8 @@ function ImageCarousel({ images }: { images: string[] }) {
                   className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
                     active === idx ? "bg-[#e7b84b] w-3" : "bg-white/40 hover:bg-white/60"
                   }`}
+                  title={`Go to image ${idx + 1}`}
+                  aria-label={`Go to image ${idx + 1}`}
                 />
               ))}
             </div>
@@ -448,6 +455,7 @@ function PublicApp({ lang, setLang }:{ lang:Lang, setLang:(l:Lang)=>void }){
           <Route path="/hire-me" element={<Navigate to="/contact" replace />} />
           <Route path="/contact" element={<ContactPage lang={lang} setLang={setLang} />} />
           <Route path="/cv" element={<CvPage lang={lang} setLang={setLang} />} />
+          <Route path="/cv/ats" element={<AtsCvModal standalone={true} initialLang={lang} />} />
           <Route path="*" element={<NotFoundPage lang={lang} setLang={setLang} />} />
         </Routes>
       </PageTransition>
@@ -685,23 +693,132 @@ function AboutPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
             </div>
           </MagicCard>
         </div>
-        <div className="space-y-5">
-          <MagicCard>
-            <div className={`text-[12px] font-mono ${lt?"text-[#a0782e]":"text-[#e4c274]"}`}>{t("EDUCATION","শিক্ষাগত যোগ্যতা",lang)}</div>
-            {education.map(ed=>(<div key={`${ed.school}-${ed.period}`} className="mt-3"><div className={`text-[16px] font-[630] ${lt?"text-[#1a1a1f]":""}`}>{ed.degree[lang]}</div><div className={`text-[13.5px] ${lt?"text-[#a0782e]":"text-[#d5b96f]"}`}>{ed.school}</div><div className={`text-[13px] mt-1 ${lt?"text-[#8a8278]":"text-[#a9aebd]"}`}>{ed.period} | {ed.note[lang]}</div></div>))}
-          </MagicCard>
-          <SectionWrapper enabled={sectionVisibility.achievements} data={achievements}>
-            <MagicCard>
-              <div className={`text-[12px] font-mono ${lt?"text-[#a0782e]":"text-[#e4c274]"}`}>{t("ACHIEVEMENTS","অর্জনসমূহ",lang)}</div>
-              <ul className={`mt-3 space-y-[10px] text-[14px] ${lt?"text-[#3a3730]":"text-[#ccd0dc]"}`}>
-                {achievements.map((a,i)=><li key={i} className="flex gap-2"><Star size={14} className={`mt-[3px] ${lt?"text-[#a0782e]":"text-[#e7c66a]"}`}/> {a[lang]}</li>)}
-              </ul>
-            </MagicCard>
-          </SectionWrapper>
-          <div className={`rounded-[18px] px-5 py-4 flex items-center gap-3 ${lt?"bg-[#e8f5e8] border border-[#c5e3c5]":"glass"}`}>
-            <span className="w-2.5 h-2.5 rounded-full bg-[#5bd07a] shadow-[0_0_14px_rgba(91,208,122,.6)] animate-pulse" />
-            <span className={`text-[13.5px] ${lt?"text-[#3d7a3d]":"text-[#c5d9c7]"}`}>{t("Open to work | Remote / Hybrid | GMT+6","কাজের জন্য উন্মুক্ত | রিমোট / হাইব্রিড | GMT+6",lang)}</span>
+        <div className="space-y-6">
+          {/* Education Section */}
+          <div className={`p-6 rounded-[22px] border relative overflow-hidden transition-all duration-300 ${
+            lt ? "bg-white/40 border-[#e5e0d4] shadow-sm" : "bg-black/30 border-white/[0.08] backdrop-blur-md"
+          }`}>
+            <div className="flex items-center gap-2.5 mb-6">
+              <div className={`p-2 rounded-lg ${lt ? "bg-[#e7b84b]/10 text-[#a0782e]" : "bg-[#e7b84b]/20 text-[#e4c274]"}`}>
+                <GraduationCap size={20} />
+              </div>
+              <div className={`text-[13px] font-mono tracking-wider uppercase ${lt ? "text-[#a0782e]" : "text-[#e4c274]"}`}>
+                {t("EDUCATION", "শিক্ষাগত যোগ্যতা", lang)}
+              </div>
+            </div>
+
+            <div className="relative pl-5 border-l-2 border-dashed border-[#e7b84b]/30 space-y-6 ml-3">
+              {education.map((ed, idx) => (
+                <motion.div
+                  key={`${ed.school}-${ed.period}`}
+                  initial={{ opacity: 0, x: -15 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: idx * 0.1 }}
+                  className="relative group"
+                >
+                  {/* Outer dot indicator */}
+                  <div className={`absolute -left-[30px] top-1.5 w-4.5 h-4.5 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
+                    lt 
+                      ? "bg-white border-[#a0782e] group-hover:bg-[#a0782e]" 
+                      : "bg-[#12121b] border-[#e4c274] group-hover:bg-[#e4c274]"
+                  }`}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
+                  </div>
+
+                  <div className={`p-4 rounded-[14px] border transition-all duration-300 ${
+                    lt 
+                      ? "bg-white/60 border-[#e5e0d4]/60 group-hover:border-[#a0782e]/40 group-hover:shadow-md" 
+                      : "bg-white/[0.02] border-white/[0.04] group-hover:border-white/[0.12] group-hover:bg-white/[0.04] group-hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)]"
+                  }`}>
+                    <div className={`text-[16px] font-[650] tracking-tight leading-snug transition-colors duration-300 ${
+                      lt ? "text-[#1a1a1f] group-hover:text-[#a0782e]" : "text-[#e8e9ef] group-hover:text-[#e4c274]"
+                    }`}>
+                      {ed.degree[lang]}
+                    </div>
+                    <div className={`text-[13.5px] font-[550] mt-1 ${lt ? "text-[#a0782e]" : "text-[#d5b96f]"}`}>
+                      {ed.school}
+                    </div>
+                    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-[12.5px] ${lt ? "text-[#8a8278]" : "text-[#a9aebd]"}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-[600] ${
+                        lt ? "bg-black/5 text-[#5a5449]" : "bg-white/5 text-[#ccd0dc]"
+                      }`}>
+                        {ed.period}
+                      </span>
+                      {ed.note && ed.note[lang] && (
+                        <>
+                          <span className="opacity-40">•</span>
+                          <span>{ed.note[lang]}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
+
+          {/* Achievements Section */}
+          <SectionWrapper enabled={sectionVisibility.achievements} data={achievements}>
+            <div className={`p-6 rounded-[22px] border relative overflow-hidden transition-all duration-300 ${
+              lt ? "bg-white/40 border-[#e5e0d4] shadow-sm" : "bg-black/30 border-white/[0.08] backdrop-blur-md"
+            }`}>
+              <div className="flex items-center gap-2.5 mb-6">
+                <div className={`p-2 rounded-lg ${lt ? "bg-[#e7b84b]/10 text-[#a0782e]" : "bg-[#e7b84b]/20 text-[#e4c274]"}`}>
+                  <Award size={20} />
+                </div>
+                <div className={`text-[13px] font-mono tracking-wider uppercase ${lt ? "text-[#a0782e]" : "text-[#e4c274]"}`}>
+                  {t("ACHIEVEMENTS", "অর্জনসমূহ", lang)}
+                </div>
+              </div>
+
+              <div className="grid gap-3.5">
+                {achievements.map((a, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, delay: idx * 0.08 }}
+                    whileHover={{ scale: 1.015, x: 4 }}
+                    className={`flex items-start gap-3.5 p-4 rounded-[14px] border transition-all duration-300 cursor-default group ${
+                      lt
+                        ? "bg-white/60 border-[#e5e0d4]/60 hover:border-[#a0782e]/40 hover:bg-white hover:shadow-sm"
+                        : "bg-white/[0.02] border-white/[0.04] hover:border-white/[0.12] hover:bg-white/[0.04] hover:shadow-[0_8px_30px_rgb(0,0,0,0.15)]"
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg transition-transform duration-300 group-hover:rotate-12 ${
+                      lt ? "bg-[#e7b84b]/8 text-[#a0782e]" : "bg-[#e7b84b]/12 text-[#e4c274]"
+                    }`}>
+                      <Star size={16} className="fill-current" />
+                    </div>
+                    <div className={`text-[14px] leading-relaxed transition-colors duration-300 ${
+                      lt ? "text-[#3a3730] group-hover:text-[#1a1a1f]" : "text-[#ccd0dc] group-hover:text-[#e8e9ef]"
+                    }`}>
+                      {a[lang]}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </SectionWrapper>
+
+          {/* Open to Work status pill */}
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className={`rounded-[18px] px-5 py-4 flex items-center gap-3 border transition-all duration-300 ${
+              lt 
+                ? "bg-[#e8f5e8] border-[#c5e3c5] hover:shadow-sm" 
+                : "bg-emerald-500/5 border-emerald-500/10 hover:border-emerald-500/20"
+            }`}
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-[#5bd07a] shadow-[0_0_14px_rgba(91,208,122,.6)] animate-pulse" />
+            <span className={`text-[13.5px] font-[550] ${lt ? "text-[#3d7a3d]" : "text-[#c5d9c7]"}`}>
+              {t("Open to work | Remote / Hybrid | GMT+6", "কাজের জন্য উন্মুক্ত | রিমোট / হাইব্রিড | GMT+6", lang)}
+            </span>
+          </motion.div>
         </div>
       </div>
     </PageShell>
@@ -981,7 +1098,7 @@ function ContactPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
     await updateContacts(nextContacts)
 
     // Store to Supabase Database via portfolio_content
-    const { data, error } = await supabase.from('portfolio_content').select('value').eq('key', 'messages').single()
+    const { data } = await supabase.from('portfolio_content').select('value').eq('key', 'messages').single()
     const existing = data?.value || []
     const newMsg = {
       id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -1354,6 +1471,7 @@ ${services.map(s=>`${s.title.en} — ${s.desc.en} (${s.time})`).join('\n')}
 function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
   const { profile, education, experience, skills, tools, achievements, services, cvCount, incCv, pageBackgroundMap: bgMap, hireMe, emailSettings, emailLogs, updateEmailLogs } = useStore()
   const [liveCount, setLiveCount] = useState<number|null>(null)
+  const [showAtsModal, setShowAtsModal] = useState(false)
   useEffect(()=>{ getCvDownloadCount().then(setLiveCount) }, [])
   
   const handleDownload = async (type: "designed" | "ats" = "designed") => {
@@ -1416,7 +1534,11 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
       a.download = type === "designed" ? "MD_MUNTASIR_SHIHAB_CV.pdf" : "MD_MUNTASIR_SHIHAB_ATS_CV.pdf"
       a.click()
     } else {
-      generateCV(profile, education, experience, skills, tools, achievements, services)
+      if (type === "ats") {
+        setShowAtsModal(true)
+      } else {
+        generateCV(profile, education, experience, skills, tools, achievements, services)
+      }
     }
   }
   
@@ -1437,7 +1559,8 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
           </div>
           <div className="flex flex-wrap gap-3 mt-6">
             <ShimmerButton onClick={() => handleDownload("designed")}>{t("Download CV","CV ডাউনলোড",lang)}</ShimmerButton>
-            <button onClick={() => handleDownload("ats")} className="px-4 h-10 rounded-full glass text-[13.4px]">{t("ATS Version","ATS সংস্করণ",lang)}</button>
+            <button onClick={() => handleDownload("ats")} className="px-4 h-10 rounded-full glass text-[13.4px] transition hover:bg-white/5">{t("Download ATS CV","ATS সিভি ডাউনলোড",lang)}</button>
+            <button onClick={() => setShowAtsModal(true)} className="px-4 h-10 rounded-full text-[13.4px] border border-white/10 hover:border-white/20 hover:bg-white/5 transition text-[#ccd0dc]">{t("Preview Live ATS CV","ATS লাইভ প্রিভিউ",lang)}</button>
           </div>
         </MagicCard>
         <MagicCard>
@@ -1448,6 +1571,10 @@ function CvPage({lang,setLang}:{lang:Lang,setLang:(l:Lang)=>void}){
           <div className="mt-5 text-[13px]">{t("Email","ইমেইল",lang)}: {profile.email}<br/>{profile.location[lang]}</div>
         </MagicCard>
       </div>
+
+      {showAtsModal && (
+        <AtsCvModal onClose={() => setShowAtsModal(false)} initialLang={lang} />
+      )}
     </PageShell>
   )
 }
@@ -1800,6 +1927,8 @@ function AdminMessages({lang}:{lang:Lang}){
                     value={contacts.find(c => c.email.toLowerCase() === d.email.toLowerCase())?.tags[0] || "none"}
                     onChange={(e) => handleUpdateContactType(d, e.target.value)}
                     className="text-[11px] px-2.5 py-1 rounded-md bg-black/45 border border-white/10 outline-none cursor-pointer text-[#cbd0df] hover:border-gold/30 hover:bg-black/60 transition"
+                    title={t("CRM Contact Type", "কন্ট্যাক্ট টাইপ", lang)}
+                    aria-label={t("CRM Contact Type", "কন্ট্যাক্ট টাইপ", lang)}
                   >
                     <option value="none">{t("Not Classified", "শ্রেণীবিন্যাস ছাড়া", lang)}</option>
                     <option value="lead">{t("Lead", "লিড (সম্ভাব্য)", lang)}</option>

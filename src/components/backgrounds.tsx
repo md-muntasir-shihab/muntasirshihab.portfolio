@@ -16,7 +16,7 @@ type BGType =
   | "neuralWavy"
   | "particleGrid"
 
-export function AnimatedBackground({ type }: { type: BGType }) {
+export function AnimatedBackground({ type: _type }: { type: BGType }) {
   // To keep animations minimalist and improve performance, we remove heavy Canvas layers.
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden bg-[#07070b]">
@@ -27,7 +27,7 @@ export function AnimatedBackground({ type }: { type: BGType }) {
   )
 }
 
-function BackgroundLayer({ type }: { type: BGType }) {
+export function BackgroundLayer({ type }: { type: BGType }) {
   switch(type){
     case "beamsGold": return <BeamsGold />
     case "floatingSpot": return <FloatingSpot />

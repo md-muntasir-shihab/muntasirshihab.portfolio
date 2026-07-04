@@ -34,7 +34,7 @@ test.describe('Admin Panel Functional Tests', () => {
 
     // Click on Security link in sidebar
     await page.click('a:has-text("Security"), a:has-text("সিকিউরিটি")');
-    await expect(page.locator('text=/Two-Factor Authentication/')).toBeVisible();
+    await expect(page.locator('text=/Two-Factor Authentication/').first()).toBeVisible();
   });
 
   test('should toggle section visibility and reflect in public navbar', async ({ page }) => {
